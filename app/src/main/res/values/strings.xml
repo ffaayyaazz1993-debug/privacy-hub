@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Privacy Hub</string>
+    <string name="permission_needed">Overlay permission is required so the privacy layer can cover other apps.</string>
+</resources>

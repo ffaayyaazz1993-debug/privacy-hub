@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.PrivacyHub" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF102038</item>
+        <item name="android:navigationBarColor">#FFF4F6FA</item>
+        <item name="android:windowBackground">#FFF4F6FA</item>
+    </style>
+</resources>
