@@ -35,10 +35,11 @@ class OverlayService : Service(), SensorEventListener {
     private var running = false
 
     private val handler = Handler(Looper.getMainLooper())
+    private var fadeScheduled = false
     private val fadeTick = object : Runnable {
         override fun run() {
+            fadeScheduled = false
             updateAlpha()
-            if (running) handler.postDelayed(this, 24L)
         }
     }
 
@@ -58,32 +59,39 @@ class OverlayService : Service(), SensorEventListener {
             }
             ACTION_REFRESH -> {
                 updateAlpha()
-                return START_STICKY
+                return START_NOT_STICKY
             }
             else -> startPrivacyScreen()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun startPrivacyScreen() {
-        if (!Settings.canDrawOverlays(this)) {
+        try {
+            if (!Settings.canDrawOverlays(this)) {
+                stopSelf()
+                return
+            }
+
+            startForeground(NOTIFICATION_ID, buildNotification())
+
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+
+            addOverlayView()
+            registerSensor()
+            running = true
+            handler.removeCallbacks(fadeTick)
+            fadeScheduled = false
+            updateAlpha()
+            instance = this
+            isRunning = true
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Overlay failed to start", e)
+            cleanup()
             stopSelf()
-            return
         }
-
-        startForeground(NOTIFICATION_ID, buildNotification())
-
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-
-        addOverlayView()
-        registerSensor()
-        running = true
-        handler.removeCallbacks(fadeTick)
-        handler.post(fadeTick)
-        instance = this
-        isRunning = true
     }
 
     private fun addOverlayView() {
@@ -99,7 +107,6 @@ class OverlayService : Service(), SensorEventListener {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -142,11 +149,17 @@ class OverlayService : Service(), SensorEventListener {
             thresholdDeg = threshold
         ).toFloat()
 
-        // Time-ish smoothing: sensor events arrive often enough for this to be
-        // stable without a separate animator.
         currentAlpha += (target - currentAlpha) * 0.22f
-        if (kotlin.math.abs(target - currentAlpha) < 0.002f) currentAlpha = target
+        if (kotlin.math.abs(target - currentAlpha) < 0.002f) {
+            currentAlpha = target
+            dimView?.alpha = currentAlpha
+            return
+        }
         dimView?.alpha = currentAlpha
+        if (!fadeScheduled && running) {
+            fadeScheduled = true
+            handler.postDelayed(fadeTick, 16L)
+        }
     }
 
     private fun createChannel() {
@@ -212,6 +225,7 @@ class OverlayService : Service(), SensorEventListener {
         const val KEY_THRESHOLD = "threshold"
         private const val CHANNEL_ID = "privacy_screen"
         private const val NOTIFICATION_ID = 1001
+        private const val TAG = "PrivacyHub"
 
         @Volatile
         var isRunning: Boolean = false
@@ -221,6 +235,7 @@ class OverlayService : Service(), SensorEventListener {
         private var instance: OverlayService? = null
 
         fun start(context: Context) {
+            if (isRunning) return
             val intent = Intent(context, OverlayService::class.java).setAction(ACTION_START)
             context.startForegroundService(intent)
         }

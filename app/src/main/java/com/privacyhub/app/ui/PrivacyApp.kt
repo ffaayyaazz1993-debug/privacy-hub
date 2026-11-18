@@ -83,6 +83,12 @@ fun PrivacyHubApp() {
         }
     }
 
+    // Keep the persisted armed state and the actual service in sync across
+    // process death, force-stop and reinstall.
+    LaunchedEffect(armed, hasOverlay) {
+        if (armed && hasOverlay) OverlayService.start(context)
+    }
+
     fun setArmed(on: Boolean) {
         armed = on
         prefs.edit().putBoolean("armed", on).apply()
