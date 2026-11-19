@@ -1,6 +1,12 @@
 package com.privacyhub.app.ui
 
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,9 +25,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,22 +38,74 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.privacyhub.app.PrivacyAccessibilityService
 import com.privacyhub.app.ReaderActivity
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
+import com.privacyhub.app.service.MaskService
+
+private fun accessibilityEnabled(context: Context): Boolean {
+    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+    val target = ComponentName(context, PrivacyAccessibilityService::class.java)
+    return am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any {
+        val si = it.resolveInfo.serviceInfo
+        si.packageName == target.packageName && si.name == target.className
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmartPrivacyApp() {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("smart_privacy_prefs", Context.MODE_PRIVATE) }
+
     var config by remember { mutableStateOf(MaskStore.load(context)) }
+    var maskOn by remember { mutableStateOf(prefs.getBoolean("enabled", false)) }
+    var refresh by remember { mutableStateOf(0) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val hasOverlay = remember(refresh) { Settings.canDrawOverlays(context) }
+    val hasAccessibility = remember(refresh) { accessibilityEnabled(context) }
 
     fun update(transform: (MaskConfig) -> MaskConfig) {
         val next = MaskStore.normalize(transform(config))
         config = next
         MaskStore.save(context, next)
+    }
+
+    fun setMask(on: Boolean) {
+        if (on) {
+            if (!Settings.canDrawOverlays(context)) {
+                context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                return
+            }
+            if (!accessibilityEnabled(context)) {
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                return
+            }
+            MaskService.start(context)
+        } else {
+            MaskService.stop(context)
+        }
+        maskOn = on
+        prefs.edit().putBoolean("enabled", on).apply()
+    }
+
+    LaunchedEffect(maskOn, hasOverlay, hasAccessibility) {
+        if (maskOn && hasOverlay && hasAccessibility) MaskService.start(context)
     }
 
     MaterialTheme {
@@ -59,22 +120,55 @@ fun SmartPrivacyApp() {
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
+                // System-wide mask over other apps
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Private Reader", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("System-wide mask", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("Blackout over other apps with a viewing window", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(checked = maskOn, onCheckedChange = { setMask(it) })
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Accessibility relay: " + (if (hasAccessibility) "enabled" else "NOT enabled") +
+                                "   ·   Overlay: " + (if (hasOverlay) "granted" else "NOT granted"),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
+                                Text(if (hasAccessibility) "Accessibility ✓" else "Enable accessibility")
+                            }
+                            OutlinedButton(onClick = {
+                                context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                            }) { Text(if (hasOverlay) "Overlay ✓" else "Grant overlay") }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Touches in the viewing window are relayed to the app underneath, " +
+                                "so they land a moment after you lift your finger. Enable both " +
+                                "permissions above, then switch the mask on.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                // In-app private reader
+                Card {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Private Reader (in-app)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Read web pages through a small viewing window while the rest " +
-                                "of the screen is blacked out. Drag the round handle to move " +
-                                "the window, the square corner to resize it.",
+                            "Read web pages through the viewing window with smooth, direct " +
+                                "touch. No accessibility needed.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(Modifier.height(10.dp))
-                        Button(onClick = {
-                            context.startActivity(Intent(context, ReaderActivity::class.java))
-                        }) { Text("Open Private Reader") }
+                        Button(onClick = { context.startActivity(Intent(context, ReaderActivity::class.java)) }) {
+                            Text("Open Private Reader")
+                        }
                     }
                 }
 
@@ -111,10 +205,9 @@ fun SmartPrivacyApp() {
                         Text("Boundary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "This works inside the app's own reader. Android blocks tap-through " +
-                                "on overlays drawn over OTHER apps, so a system-wide interactive " +
-                                "mask is not possible. This reduces visible information; it does " +
-                                "not physically block side-view light.",
+                            "System-wide tap-through works only via the accessibility relay and " +
+                                "has a slight delay. This reduces visible information; it does not " +
+                                "physically block side-view light.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }

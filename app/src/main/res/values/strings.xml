@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Smart Privacy Screen</string>
-    <string name="permission_needed">Overlay permission is required so the privacy mask can cover other apps.</string>
+    <string name="accessibility_desc">Relays your touches from the privacy viewing window into the app underneath so you can use other apps through the mask. Only dispatches the gestures you make inside the viewing window.</string>
 </resources>
