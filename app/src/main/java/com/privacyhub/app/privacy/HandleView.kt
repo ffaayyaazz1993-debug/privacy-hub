@@ -7,7 +7,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 
-enum class HandleKind { MOVE, RESIZE }
+enum class HandleKind { MOVE, RESIZE, CLOSE }
 
 /** Small touchable affordance drawn above the non-touchable mask. */
 class HandleView @JvmOverloads constructor(
@@ -28,20 +28,31 @@ class HandleView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val pad = stroke.strokeWidth
-        if (kind == HandleKind.MOVE) {
-            val cx = width / 2f
-            val cy = height / 2f
-            val r = (minOf(width, height) / 2f) - pad
-            canvas.drawCircle(cx, cy, r, fill)
-            canvas.drawCircle(cx, cy, r, stroke)
-            canvas.drawLine(cx - r * 0.45f, cy, cx + r * 0.45f, cy, stroke)
-            canvas.drawLine(cx, cy - r * 0.45f, cx, cy + r * 0.45f, stroke)
-        } else {
-            val rect = android.graphics.RectF(pad, pad, width - pad, height - pad)
-            canvas.drawRect(rect, fill)
-            canvas.drawRect(rect, stroke)
-            canvas.drawLine(rect.left + rect.width() * 0.25f, rect.top + rect.height() * 0.75f,
-                rect.right - rect.width() * 0.15f, rect.top + rect.height() * 0.25f, stroke)
+        val cx = width / 2f
+        val cy = height / 2f
+        when (kind) {
+            HandleKind.MOVE -> {
+                val r = (minOf(width, height) / 2f) - pad
+                canvas.drawCircle(cx, cy, r, fill)
+                canvas.drawCircle(cx, cy, r, stroke)
+                canvas.drawLine(cx - r * 0.45f, cy, cx + r * 0.45f, cy, stroke)
+                canvas.drawLine(cx, cy - r * 0.45f, cx, cy + r * 0.45f, stroke)
+            }
+            HandleKind.RESIZE -> {
+                val rect = android.graphics.RectF(pad, pad, width - pad, height - pad)
+                canvas.drawRect(rect, fill)
+                canvas.drawRect(rect, stroke)
+                canvas.drawLine(rect.left + rect.width() * 0.25f, rect.top + rect.height() * 0.75f,
+                    rect.right - rect.width() * 0.15f, rect.top + rect.height() * 0.25f, stroke)
+            }
+            HandleKind.CLOSE -> {
+                val r = (minOf(width, height) / 2f) - pad
+                canvas.drawCircle(cx, cy, r, fill)
+                canvas.drawCircle(cx, cy, r, stroke)
+                val k = r * 0.42f
+                canvas.drawLine(cx - k, cy - k, cx + k, cy + k, stroke)
+                canvas.drawLine(cx - k, cy + k, cx + k, cy - k, stroke)
+            }
         }
     }
 }

@@ -51,9 +51,9 @@ fun SmartPrivacyApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("smart_privacy_prefs", Context.MODE_PRIVATE) }
 
-    var config by remember { mutableStateOf(MaskStore.load(context)) }
-    var maskOn by remember { mutableStateOf(prefs.getBoolean("enabled", false)) }
     var refresh by remember { mutableStateOf(0) }
+    var config by remember { mutableStateOf(MaskStore.load(context)) }
+    var maskOn by remember(refresh) { mutableStateOf(prefs.getBoolean("enabled", false)) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -181,9 +181,9 @@ fun SmartPrivacyApp() {
                         Text("Boundary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "System-wide tap-through works only via the accessibility relay and " +
-                                "has a slight delay. This reduces visible information; it does not " +
-                                "physically block side-view light.",
+                            "The viewing window is left uncovered, so touches there pass straight " +
+                                "through to the app underneath — no accessibility needed. This reduces " +
+                                "visible information; it does not physically block side-view light.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }

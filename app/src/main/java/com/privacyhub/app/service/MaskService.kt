@@ -50,6 +50,7 @@ class MaskService : Service() {
     private var rightStrip: View? = null
     private var moveView: HandleView? = null
     private var resizeView: HandleView? = null
+    private var closeView: HandleView? = null
 
     private var topParams: WindowManager.LayoutParams? = null
     private var bottomParams: WindowManager.LayoutParams? = null
@@ -57,6 +58,7 @@ class MaskService : Service() {
     private var rightParams: WindowManager.LayoutParams? = null
     private var moveParams: WindowManager.LayoutParams? = null
     private var resizeParams: WindowManager.LayoutParams? = null
+    private var closeParams: WindowManager.LayoutParams? = null
     private var dragMask: MaskView? = null
 
     private var config: MaskConfig = MaskStore.DEFAULT
@@ -65,13 +67,13 @@ class MaskService : Service() {
     private val touchSlop: Int get() = ViewConfiguration.get(this).scaledTouchSlop
 
     private val handleSizePx: Int
-        get() = (56 * resources.displayMetrics.density).toInt()
+        get() = (36 * resources.displayMetrics.density).toInt()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> { cleanup(); stopSelf(); return START_NOT_STICKY }
+            ACTION_STOP -> { stopMask(); return START_NOT_STICKY }
             ACTION_CONCEAL -> { config = MaskStore.CONCEALED.copy(dimAlpha = config.dimAlpha); persistAndRender() }
             ACTION_REVEAL -> { config = MaskStore.DEFAULT.copy(dimAlpha = config.dimAlpha); persistAndRender() }
             else -> startMask()
@@ -120,7 +122,9 @@ class MaskService : Service() {
         1, 1,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
 
@@ -137,7 +141,7 @@ class MaskService : Service() {
     }
 
     private fun addHandles() {
-        if (moveView != null || resizeView != null) return
+        if (moveView != null || resizeView != null || closeView != null) return
         val size = handleSizePx
         val move = HandleView(this, kind = HandleKind.MOVE).apply {
             setOnTouchListener { _, e -> onMoveTouch(e) }
@@ -145,16 +149,22 @@ class MaskService : Service() {
         val resize = HandleView(this, kind = HandleKind.RESIZE).apply {
             setOnTouchListener { _, e -> onResizeTouch(e) }
         }
-        moveParams = handleParams(size); resizeParams = handleParams(size)
-        moveView = move; resizeView = resize
+        val close = HandleView(this, kind = HandleKind.CLOSE).apply {
+            setOnTouchListener { _, e -> onCloseTouch(e) }
+        }
+        moveParams = handleParams(size); resizeParams = handleParams(size); closeParams = handleParams(size)
+        moveView = move; resizeView = resize; closeView = close
         windowManager.addView(move, moveParams)
         windowManager.addView(resize, resizeParams)
+        windowManager.addView(close, closeParams)
     }
 
     private fun handleParams(size: Int) = WindowManager.LayoutParams(
         size, size,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
 
@@ -185,6 +195,7 @@ class MaskService : Service() {
         val size = handleSizePx
         place(moveView, moveParams, (r.centerX() - size / 2f).toInt(), (b - size / 2f).toInt(), size, size)
         place(resizeView, resizeParams, (rr - size / 2f).toInt(), (b - size / 2f).toInt(), size, size)
+        place(closeView, closeParams, (rr - size / 2f).toInt(), (t - size / 2f).toInt(), size, size)
     }
 
     private fun persistAndRender() {
@@ -208,6 +219,7 @@ class MaskService : Service() {
                 val hs = handleSizePx.toFloat()
                 drawMove(canvas, r.centerX(), r.bottom, hs)
                 drawResize(canvas, r.right, r.bottom, hs)
+                drawClose(canvas, r.right, r.top, hs)
             }
             private fun drawMove(c: Canvas, cx: Float, cy: Float, s: Float) {
                 val rad = s / 2f - 3f
@@ -221,18 +233,27 @@ class MaskService : Service() {
                 c.drawLine(rf.left + rf.width() * 0.25f, rf.top + rf.height() * 0.75f,
                     rf.right - rf.width() * 0.15f, rf.top + rf.height() * 0.25f, hStroke)
             }
+            private fun drawClose(c: Canvas, cx: Float, cy: Float, s: Float) {
+                val rad = s / 2f - 3f
+                c.drawCircle(cx, cy, rad, hFill); c.drawCircle(cx, cy, rad, hStroke)
+                val k = rad * 0.42f
+                c.drawLine(cx - k, cy - k, cx + k, cy + k, hStroke)
+                c.drawLine(cx - k, cy + k, cx + k, cy - k, hStroke)
+            }
         }
         // Match the resting strip mask exactly: sharp corners, no border. (The
         // resting aperture is the rectangular gap between strips; a rounded drag
         // preview would visibly morph chamfered<->sharp on tap/release.)
         dm.showBorder = false
         dm.config = config.copy(cornerRadiusDp = 0f)
+        val screen = screenSize()
         val p = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            screen.x, screen.y,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
         dragMask = dm
@@ -242,12 +263,14 @@ class MaskService : Service() {
         dm.onceOnPreDraw {
             topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
             leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
-            moveView?.alpha = 0f; resizeView?.alpha = 0f
+            moveView?.alpha = 0f; resizeView?.alpha = 0f; closeView?.alpha = 0f
         }
     }
 
     private fun updateDrag() {
-        dragMask?.config = config
+        // Keep the preview identical to the resting strip mask (sharp, no border);
+        // using the raw config here re-introduced the rounded radius mid-drag.
+        dragMask?.config = config.copy(cornerRadiusDp = 0f)
     }
 
     private fun endDrag() {
@@ -257,7 +280,7 @@ class MaskService : Service() {
         // remove the drag mask only AFTER the strips have drawn (no unmasked frame).
         topStrip?.visibility = View.VISIBLE; bottomStrip?.visibility = View.VISIBLE
         leftStrip?.visibility = View.VISIBLE; rightStrip?.visibility = View.VISIBLE
-        moveView?.alpha = 1f; resizeView?.alpha = 1f
+        moveView?.alpha = 1f; resizeView?.alpha = 1f; closeView?.alpha = 1f
         persistAndRender()
         val ts = topStrip
         if (ts != null) {
@@ -317,6 +340,21 @@ class MaskService : Service() {
         return false
     }
 
+    private fun onCloseTouch(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> return true
+            MotionEvent.ACTION_UP -> { stopMask(); return true }
+        }
+        return false
+    }
+
+    private fun stopMask() {
+        getSharedPreferences("smart_privacy_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("enabled", false).apply()
+        cleanup()
+        stopSelf()
+    }
+
     private fun buildNotification(): Notification {
         val channelId = "smart_privacy_mask"
         if (Build.VERSION.SDK_INT >= 26) {
@@ -350,13 +388,13 @@ class MaskService : Service() {
 
     private fun cleanup() {
         running = false
-        listOf(topStrip, bottomStrip, leftStrip, rightStrip, moveView, resizeView, dragMask).forEach { v ->
+        listOf(topStrip, bottomStrip, leftStrip, rightStrip, moveView, resizeView, closeView, dragMask).forEach { v ->
             if (v != null) runCatching { windowManager.removeView(v) }
         }
         topStrip = null; bottomStrip = null; leftStrip = null; rightStrip = null
-        moveView = null; resizeView = null; dragMask = null
+        moveView = null; resizeView = null; closeView = null; dragMask = null
         topParams = null; bottomParams = null; leftParams = null; rightParams = null
-        moveParams = null; resizeParams = null
+        moveParams = null; resizeParams = null; closeParams = null
         if (::windowManager.isInitialized) runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
     }
 
