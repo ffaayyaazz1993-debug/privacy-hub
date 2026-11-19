@@ -1,4 +1,3 @@
 <resources>
     <string name="app_name">Smart Privacy Screen</string>
-    <string name="accessibility_desc">Relays your touches from the privacy viewing window into the app underneath so you can use other apps through the mask. Only dispatches the gestures you make inside the viewing window.</string>
 </resources>

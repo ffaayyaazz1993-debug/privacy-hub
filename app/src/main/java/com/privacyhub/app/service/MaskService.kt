@@ -6,45 +6,50 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.Path
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Point
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import com.privacyhub.app.PrivacyAccessibilityService
 import com.privacyhub.app.privacy.HandleKind
 import com.privacyhub.app.privacy.HandleView
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
-import com.privacyhub.app.privacy.MaskView
 
 /**
- * System-wide blackout mask with a viewing window. The black area is
- * NOT_TOUCHABLE. The aperture is a transparent touch-capture window: touches
- * there are recorded and re-dispatched into the app underneath via the
- * accessibility service (which bypasses Android's obscured-touch block).
+ * System-wide blackout mask with a viewing window.
  *
- * During dispatch the capture window is made NOT_TOUCHABLE so the injected
- * gesture reaches the underlying app instead of looping back into our overlay.
+ * The black area is built from FOUR separate NOT_TOUCHABLE strip windows placed
+ * AROUND the aperture (top / bottom / left / right). The aperture itself has NO
+ * overlay window over it at all, so touches there land directly on the app
+ * underneath. This avoids Android's obscured-touch (tapjacking) rejection that a
+ * full-screen overlay (even NOT_TOUCHABLE) triggers on real devices: any overlay
+ * covering the target makes the target drop the touch. Leaving the aperture
+ * uncovered is what lets the user actually interact with the app.
  */
 class MaskService : Service() {
 
     private lateinit var windowManager: WindowManager
     private val handler = Handler(Looper.getMainLooper())
 
-    private var maskView: MaskView? = null
-    private var captureView: View? = null
+    private var topStrip: View? = null
+    private var bottomStrip: View? = null
+    private var leftStrip: View? = null
+    private var rightStrip: View? = null
     private var moveView: HandleView? = null
     private var resizeView: HandleView? = null
 
-    private var captureParams: WindowManager.LayoutParams? = null
+    private var topParams: WindowManager.LayoutParams? = null
+    private var bottomParams: WindowManager.LayoutParams? = null
+    private var leftParams: WindowManager.LayoutParams? = null
+    private var rightParams: WindowManager.LayoutParams? = null
     private var moveParams: WindowManager.LayoutParams? = null
     private var resizeParams: WindowManager.LayoutParams? = null
 
@@ -67,14 +72,13 @@ class MaskService : Service() {
     }
 
     private fun startMask() {
-        if (running) { config = MaskStore.load(this); render(); return }
+        if (running) { config = MaskStore.load(this); positionAll(); return }
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return }
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         config = MaskStore.load(this)
         try {
             startForeground(NOTIF_ID, buildNotification())
-            addMask()
-            addCapture()
+            addStrips()
             addHandles()
             positionAll()
             running = true
@@ -83,37 +87,45 @@ class MaskService : Service() {
         }
     }
 
-    private fun addMask() {
-        if (maskView != null) return
-        val view = MaskView(this).apply { config = this@MaskService.config }
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
-        maskView = view
-        windowManager.addView(view, params)
+    private fun screenSize(): Point {
+        val p = Point()
+        if (Build.VERSION.SDK_INT >= 30) {
+            val b = windowManager.maximumWindowMetrics.bounds
+            p.set(b.width(), b.height())
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealSize(p)
+        }
+        return p
     }
 
-    private fun addCapture() {
-        if (captureView != null) return
-        val view = View(this).apply {
-            setBackgroundColor(0x00000000)
-            isClickable = true
-            setOnTouchListener { _, e -> relayTouch(e) }
-        }
-        val params = WindowManager.LayoutParams(
-            10, 10,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
-        captureView = view
-        captureParams = params
-        windowManager.addView(view, params)
+    private fun stripColor(): Int =
+        Color.argb((config.dimAlpha * 255).toInt().coerceIn(0, 255), 0, 0, 0)
+
+    private fun newStrip(): View = View(this).apply {
+        setBackgroundColor(stripColor())
+        isClickable = false
+        isFocusable = false
+    }
+
+    private fun stripParams() = WindowManager.LayoutParams(
+        1, 1,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.TOP or Gravity.START }
+
+    private fun addStrips() {
+        if (topStrip != null) return
+        topStrip = newStrip(); bottomStrip = newStrip()
+        leftStrip = newStrip(); rightStrip = newStrip()
+        topParams = stripParams(); bottomParams = stripParams()
+        leftParams = stripParams(); rightParams = stripParams()
+        windowManager.addView(topStrip, topParams)
+        windowManager.addView(bottomStrip, bottomParams)
+        windowManager.addView(leftStrip, leftParams)
+        windowManager.addView(rightStrip, rightParams)
     }
 
     private fun addHandles() {
@@ -138,85 +150,39 @@ class MaskService : Service() {
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START }
 
-    private fun positionAll() {
-        val mask = maskView ?: return
-        val w = mask.width; val h = mask.height
-        if (w == 0 || h == 0) { handler.post { positionAll() }; return }
-        val r = MaskStore.apertureRectF(w, h, config, resources.displayMetrics.density)
-        captureParams?.let { p ->
-            p.x = r.left.toInt(); p.y = r.top.toInt()
-            p.width = (r.right - r.left).toInt().coerceAtLeast(1)
-            p.height = (r.bottom - r.top).toInt().coerceAtLeast(1)
-            captureView?.let { windowManager.updateViewLayout(it, p) }
-        }
-        val size = handleSizePx
-        moveParams?.let { p ->
-            p.x = (r.centerX() - size / 2f).toInt(); p.y = (r.bottom - size / 2f).toInt()
-            moveView?.let { windowManager.updateViewLayout(it, p) }
-        }
-        resizeParams?.let { p ->
-            p.x = (r.right - size / 2f).toInt(); p.y = (r.bottom - size / 2f).toInt()
-            resizeView?.let { windowManager.updateViewLayout(it, p) }
-        }
-        mask.config = config
+    private fun place(view: View?, p: WindowManager.LayoutParams?, x: Int, y: Int, w: Int, h: Int) {
+        if (view == null || p == null) return
+        p.x = x; p.y = y
+        p.width = w.coerceAtLeast(0); p.height = h.coerceAtLeast(0)
+        // A zero-size strip would be invisible; keep it but it draws nothing.
+        runCatching { windowManager.updateViewLayout(view, p) }
     }
 
-    private fun render() {
-        maskView?.config = config
-        positionAll()
+    private fun positionAll() {
+        if (topStrip == null) return
+        val screen = screenSize()
+        val sw = screen.x; val sh = screen.y
+        if (sw == 0 || sh == 0) { handler.post { positionAll() }; return }
+        val r = MaskStore.apertureRectF(sw, sh, config, resources.displayMetrics.density)
+        val l = r.left.toInt(); val t = r.top.toInt()
+        val rr = r.right.toInt(); val b = r.bottom.toInt()
+        val col = stripColor()
+        topStrip?.setBackgroundColor(col); bottomStrip?.setBackgroundColor(col)
+        leftStrip?.setBackgroundColor(col); rightStrip?.setBackgroundColor(col)
+        // Four strips around the aperture; the aperture region stays uncovered.
+        place(topStrip, topParams, 0, 0, sw, t)
+        place(bottomStrip, bottomParams, 0, b, sw, sh - b)
+        place(leftStrip, leftParams, 0, t, l, b - t)
+        place(rightStrip, rightParams, rr, t, sw - rr, b - t)
+        val size = handleSizePx
+        place(moveView, moveParams, (r.centerX() - size / 2f).toInt(), (b - size / 2f).toInt(), size, size)
+        place(resizeView, resizeParams, (rr - size / 2f).toInt(), (b - size / 2f).toInt(), size, size)
     }
 
     private fun persistAndRender() {
         config = MaskStore.normalize(config)
         MaskStore.save(this, config)
-        render()
-    }
-
-    // ---- touch relay ----
-    private val points = ArrayList<Pair<Float, Float>>()
-    private var downTime = 0L
-
-    private fun relayTouch(e: MotionEvent): Boolean {
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                points.clear(); points.add(e.rawX to e.rawY); downTime = SystemClock.uptimeMillis()
-                return true
-            }
-            MotionEvent.ACTION_MOVE -> { points.add(e.rawX to e.rawY); return true }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                points.add(e.rawX to e.rawY)
-                dispatchRelay()
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun dispatchRelay() {
-        val service = PrivacyAccessibilityService.instance
-        if (service == null || points.isEmpty()) { points.clear(); return }
-        val path = Path().apply {
-            moveTo(points.first().first, points.first().second)
-            for (i in 1 until points.size) lineTo(points[i].first, points[i].second)
-        }
-        val duration = (SystemClock.uptimeMillis() - downTime).coerceIn(1L, 2000L)
-        points.clear()
-        // Make the capture window non-touchable so the injected gesture reaches
-        // the app underneath rather than our own overlay.
-        setCaptureTouchable(false)
-        val dispatched = service.relay(path, duration) { setCaptureTouchable(true) }
-        if (!dispatched) setCaptureTouchable(true)
-    }
-
-    private fun setCaptureTouchable(touchable: Boolean) {
-        val view = captureView ?: return
-        val p = captureParams ?: return
-        p.flags = if (touchable) {
-            p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-        } else {
-            p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        }
-        runCatching { windowManager.updateViewLayout(view, p) }
+        positionAll()
     }
 
     // ---- aperture move / resize ----
@@ -224,8 +190,7 @@ class MaskService : Service() {
     private var startLeft = 0f; private var startTop = 0f
 
     private fun onMoveTouch(e: MotionEvent): Boolean {
-        val mask = maskView ?: return false
-        val w = mask.width; val h = mask.height
+        val screen = screenSize(); val w = screen.x; val h = screen.y
         if (w == 0 || h == 0) return false
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -237,7 +202,7 @@ class MaskService : Service() {
                 val left = (startLeft + (e.rawX - startRawX) / w).coerceIn(0f, 1f - cw)
                 val top = (startTop + (e.rawY - startRawY) / h).coerceIn(0f, 1f - ch)
                 config = config.copy(left = left, top = top, right = left + cw, bottom = top + ch)
-                render(); return true
+                positionAll(); return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { persistAndRender(); return true }
         }
@@ -246,8 +211,7 @@ class MaskService : Service() {
 
     private var startRight = 0f; private var startBottom = 0f
     private fun onResizeTouch(e: MotionEvent): Boolean {
-        val mask = maskView ?: return false
-        val w = mask.width; val h = mask.height
+        val screen = screenSize(); val w = screen.x; val h = screen.y
         if (w == 0 || h == 0) return false
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -258,7 +222,7 @@ class MaskService : Service() {
                 val right = (startRight + (e.rawX - startRawX) / w).coerceAtLeast(config.left + 0.06f).coerceAtMost(1f)
                 val bottom = (startBottom + (e.rawY - startRawY) / h).coerceAtLeast(config.top + 0.06f).coerceAtMost(1f)
                 config = config.copy(right = right, bottom = bottom)
-                render(); return true
+                positionAll(); return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { persistAndRender(); return true }
         }
@@ -298,11 +262,13 @@ class MaskService : Service() {
 
     private fun cleanup() {
         running = false
-        listOf(maskView, captureView, moveView, resizeView).forEach { v ->
+        listOf(topStrip, bottomStrip, leftStrip, rightStrip, moveView, resizeView).forEach { v ->
             if (v != null) runCatching { windowManager.removeView(v) }
         }
-        maskView = null; captureView = null; moveView = null; resizeView = null
-        captureParams = null; moveParams = null; resizeParams = null
+        topStrip = null; bottomStrip = null; leftStrip = null; rightStrip = null
+        moveView = null; resizeView = null
+        topParams = null; bottomParams = null; leftParams = null; rightParams = null
+        moveParams = null; resizeParams = null
         if (::windowManager.isInitialized) runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
     }
 

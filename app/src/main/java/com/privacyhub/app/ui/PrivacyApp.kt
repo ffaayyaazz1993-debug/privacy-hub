@@ -1,12 +1,9 @@
 package com.privacyhub.app.ui
 
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,20 +40,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.privacyhub.app.PrivacyAccessibilityService
 import com.privacyhub.app.ReaderActivity
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
-
-private fun accessibilityEnabled(context: Context): Boolean {
-    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-    val target = ComponentName(context, PrivacyAccessibilityService::class.java)
-    return am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any {
-        val si = it.resolveInfo.serviceInfo
-        si.packageName == target.packageName && si.name == target.className
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +65,6 @@ fun SmartPrivacyApp() {
     }
 
     val hasOverlay = remember(refresh) { Settings.canDrawOverlays(context) }
-    val hasAccessibility = remember(refresh) { accessibilityEnabled(context) }
 
     fun update(transform: (MaskConfig) -> MaskConfig) {
         val next = MaskStore.normalize(transform(config))
@@ -92,10 +78,6 @@ fun SmartPrivacyApp() {
                 context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
                 return
             }
-            if (!accessibilityEnabled(context)) {
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                return
-            }
             MaskService.start(context)
         } else {
             MaskService.stop(context)
@@ -104,8 +86,8 @@ fun SmartPrivacyApp() {
         prefs.edit().putBoolean("enabled", on).apply()
     }
 
-    LaunchedEffect(maskOn, hasOverlay, hasAccessibility) {
-        if (maskOn && hasOverlay && hasAccessibility) MaskService.start(context)
+    LaunchedEffect(maskOn, hasOverlay) {
+        if (maskOn && hasOverlay) MaskService.start(context)
     }
 
     MaterialTheme {
@@ -132,24 +114,18 @@ fun SmartPrivacyApp() {
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Accessibility relay: " + (if (hasAccessibility) "enabled" else "NOT enabled") +
-                                "   ·   Overlay: " + (if (hasOverlay) "granted" else "NOT granted"),
+                            "Overlay permission: " + (if (hasOverlay) "granted" else "NOT granted"),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
-                                Text(if (hasAccessibility) "Accessibility ✓" else "Enable accessibility")
-                            }
-                            OutlinedButton(onClick = {
-                                context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
-                            }) { Text(if (hasOverlay) "Overlay ✓" else "Grant overlay") }
-                        }
+                        OutlinedButton(onClick = {
+                            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                        }) { Text(if (hasOverlay) "Overlay ✓" else "Grant overlay") }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Touches in the viewing window are relayed to the app underneath, " +
-                                "so they land a moment after you lift your finger. Enable both " +
-                                "permissions above, then switch the mask on.",
+                            "The viewing window is left uncovered, so touches there go straight " +
+                                "to the app underneath — no accessibility needed. Grant overlay, " +
+                                "then switch the mask on.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
