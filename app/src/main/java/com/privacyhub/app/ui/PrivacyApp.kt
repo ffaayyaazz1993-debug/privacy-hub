@@ -1,16 +1,12 @@
 package com.privacyhub.app.ui
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,14 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -35,37 +30,28 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.privacyhub.app.BuildConfig
-import com.privacyhub.app.privacy.TiltMath
-import com.privacyhub.app.service.OverlayService
+import com.privacyhub.app.ReaderActivity
+import com.privacyhub.app.privacy.MaskConfig
+import com.privacyhub.app.privacy.MaskStore
+import com.privacyhub.app.service.MaskService
+
+private const val MIN_SIZE = 0.06f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrivacyHubApp() {
+fun SmartPrivacyApp() {
     val context = LocalContext.current
-    val prefs = remember {
-        context.getSharedPreferences("privacy_hub_prefs", Context.MODE_PRIVATE)
-    }
-
     var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    var armed by remember { mutableStateOf(prefs.getBoolean("armed", false)) }
-    var sensitivity by remember {
-        mutableFloatStateOf(prefs.getFloat("sensitivity", 1.0f))
-    }
-    var threshold by remember {
-        mutableFloatStateOf(prefs.getFloat("threshold", 10.0f))
-    }
-    var simulateAngle by remember { mutableFloatStateOf(0f) }
+    var enabled by remember { mutableStateOf(MaskStore.isEnabled(context)) }
+    var config by remember { mutableStateOf(MaskStore.load(context)) }
 
     val overlayLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -73,26 +59,21 @@ fun PrivacyHubApp() {
         hasOverlay = Settings.canDrawOverlays(context)
     }
 
-    val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+    LaunchedEffect(enabled, hasOverlay) {
+        if (enabled && hasOverlay) MaskService.start(context)
     }
 
-    // Keep the persisted armed state and the actual service in sync across
-    // process death, force-stop and reinstall.
-    LaunchedEffect(armed, hasOverlay) {
-        if (armed && hasOverlay) OverlayService.start(context)
+    fun update(transform: (MaskConfig) -> MaskConfig) {
+        val next = MaskStore.normalize(transform(config))
+        config = next
+        MaskStore.save(context, next)
+        MaskService.update(context)
     }
 
-    fun setArmed(on: Boolean) {
-        armed = on
-        prefs.edit().putBoolean("armed", on).apply()
-        if (on) OverlayService.start(context) else OverlayService.stop(context)
+    fun setEnabled(on: Boolean) {
+        enabled = on
+        MaskStore.setEnabled(context, on)
+        if (on) MaskService.start(context) else MaskService.stop(context)
     }
 
     fun openOverlaySettings() {
@@ -104,11 +85,73 @@ fun PrivacyHubApp() {
         )
     }
 
+    fun setWidth(value: Float) {
+        val c = config
+        val cx = (c.left + c.right) / 2f
+        val half = (value / 2f).coerceAtMost(0.5f)
+        var left = cx - half
+        var right = cx + half
+        if (left < 0f) {
+            right -= left
+            left = 0f
+        }
+        if (right > 1f) {
+            left -= right - 1f
+            right = 1f
+        }
+        update { it.copy(left = left.coerceIn(0f, 1f), right = right.coerceIn(0f, 1f)) }
+    }
+
+    fun setHeight(value: Float) {
+        val c = config
+        val cy = (c.top + c.bottom) / 2f
+        val half = (value / 2f).coerceAtMost(0.5f)
+        var top = cy - half
+        var bottom = cy + half
+        if (top < 0f) {
+            bottom -= top
+            top = 0f
+        }
+        if (bottom > 1f) {
+            top -= bottom - 1f
+            bottom = 1f
+        }
+        update { it.copy(top = top.coerceIn(0f, 1f), bottom = bottom.coerceIn(0f, 1f)) }
+    }
+
+    fun setCenterX(value: Float) {
+        val c = config
+        val w = (c.right - c.left).coerceAtLeast(MIN_SIZE)
+        val left = value - w / 2f
+        val right = left + w
+        if (left < 0f) {
+            update { it.copy(left = 0f, right = w) }
+        } else if (right > 1f) {
+            update { it.copy(left = 1f - w, right = 1f) }
+        } else {
+            update { it.copy(left = left, right = right) }
+        }
+    }
+
+    fun setCenterY(value: Float) {
+        val c = config
+        val h = (c.bottom - c.top).coerceAtLeast(MIN_SIZE)
+        val top = value - h / 2f
+        val bottom = top + h
+        if (top < 0f) {
+            update { it.copy(top = 0f, bottom = h) }
+        } else if (bottom > 1f) {
+            update { it.copy(top = 1f - h, bottom = 1f) }
+        } else {
+            update { it.copy(top = top, bottom = bottom) }
+        }
+    }
+
     MaterialTheme {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Privacy Hub", fontWeight = FontWeight.Bold) }
+                    title = { Text("Smart Privacy Screen", fontWeight = FontWeight.Bold) }
                 )
             }
         ) { padding ->
@@ -120,13 +163,36 @@ fun PrivacyHubApp() {
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                StatusCard(
-                    hasOverlay = hasOverlay,
-                    armed = armed,
-                    onToggle = { on ->
-                        if (on && !hasOverlay) openOverlaySettings() else setArmed(on)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Privacy mask",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                if (enabled) "Active over other apps"
+                                else "Stopped",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = { on ->
+                                if (on && !hasOverlay) openOverlaySettings() else setEnabled(on)
+                            }
+                        )
                     }
-                )
+                }
 
                 if (!hasOverlay) {
                     Card(
@@ -142,8 +208,8 @@ fun PrivacyHubApp() {
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Privacy Hub draws a dim layer over other apps. " +
-                                    "Grant “Display over other apps” to enable it.",
+                                "Smart Privacy Screen draws a blackout layer over other apps. " +
+                                    "Grant Display over other apps to enable it.",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(Modifier.height(10.dp))
@@ -154,116 +220,140 @@ fun PrivacyHubApp() {
                     }
                 }
 
-                ControlCard(
-                    title = "Sensitivity",
-                    subtitle = "Higher values dim at smaller tilts.",
-                    valueLabel = String.format("%.1fx", sensitivity),
-                    value = sensitivity,
-                    range = 0.5f..2.0f,
-                    onChange = {
-                        sensitivity = it
-                        prefs.edit().putFloat("sensitivity", it).apply()
-                        OverlayService.refresh(context)
+                Card {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Quick actions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { MaskService.conceal(context) }) {
+                                Text("Conceal")
+                            }
+                            OutlinedButton(onClick = { MaskService.reveal(context) }) {
+                                Text("Reveal")
+                            }
+                            OutlinedButton(onClick = {
+                                context.startActivity(Intent(context, ReaderActivity::class.java))
+                            }) {
+                                Text("Private reader")
+                            }
+                        }
                     }
-                )
+                }
 
-                ControlCard(
-                    title = "Tilt trigger",
-                    subtitle = "Tilt needed before dimming starts.",
-                    valueLabel = String.format("%.0f degrees", threshold),
-                    value = threshold,
-                    range = 5f..25f,
-                    onChange = {
-                        threshold = it
-                        prefs.edit().putFloat("threshold", it).apply()
-                        OverlayService.refresh(context)
+                Card {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Presets",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                update {
+                                    MaskConfig(
+                                        dimAlpha = it.dimAlpha,
+                                        cornerRadiusDp = 24f,
+                                    )
+                                }
+                            }) { Text("Center") }
+                            OutlinedButton(onClick = {
+                                update {
+                                    it.copy(
+                                        left = 0.10f,
+                                        top = 0.10f,
+                                        right = 0.90f,
+                                        bottom = 0.42f,
+                                        cornerRadiusDp = 16f,
+                                    )
+                                }
+                            }) { Text("Top strip") }
+                            OutlinedButton(onClick = {
+                                update {
+                                    it.copy(
+                                        left = 0.30f,
+                                        top = 0.38f,
+                                        right = 0.70f,
+                                        bottom = 0.62f,
+                                        cornerRadiusDp = 24f,
+                                    )
+                                }
+                            }) { Text("Small") }
+                        }
                     }
+                }
+
+                SliderCard(
+                    title = "Darkness",
+                    valueLabel = "${(config.dimAlpha * 100).toInt()}%",
+                    value = config.dimAlpha,
+                    range = 0.30f..0.98f,
+                    onChange = { v -> update { it.copy(dimAlpha = v) } }
+                )
+                SliderCard(
+                    title = "Window width",
+                    valueLabel = "${((config.right - config.left) * 100).toInt()}%",
+                    value = config.right - config.left,
+                    range = MIN_SIZE..1.0f,
+                    onChange = { setWidth(it) }
+                )
+                SliderCard(
+                    title = "Window height",
+                    valueLabel = "${((config.bottom - config.top) * 100).toInt()}%",
+                    value = config.bottom - config.top,
+                    range = MIN_SIZE..1.0f,
+                    onChange = { setHeight(it) }
+                )
+                SliderCard(
+                    title = "Horizontal position",
+                    valueLabel = "${(((config.left + config.right) / 2f) * 100).toInt()}%",
+                    value = (config.left + config.right) / 2f,
+                    range = 0f..1f,
+                    onChange = { setCenterX(it) }
+                )
+                SliderCard(
+                    title = "Vertical position",
+                    valueLabel = "${(((config.top + config.bottom) / 2f) * 100).toInt()}%",
+                    value = (config.top + config.bottom) / 2f,
+                    range = 0f..1f,
+                    onChange = { setCenterY(it) }
+                )
+                SliderCard(
+                    title = "Corner radius",
+                    valueLabel = "${config.cornerRadiusDp.toInt()} dp",
+                    value = config.cornerRadiusDp,
+                    range = 0f..48f,
+                    onChange = { v -> update { it.copy(cornerRadiusDp = v) } }
                 )
 
                 Card {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            "How it works",
+                            "Boundary",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Straight-on viewing stays clear. Tilt the phone " +
-                                "left or right and a dark layer fades in over " +
-                                "every app. Straighten the phone and it fades out.",
+                            "This is a software privacy utility. It reduces how much " +
+                                "information is visible; it does not physically block " +
+                                "light from reaching side viewers.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
-
-                if (BuildConfig.DEBUG) {
-                    DebugCard(
-                        angle = simulateAngle,
-                        onChange = {
-                            simulateAngle = it
-                            TiltMath.simulatedAngleDeg = it.toDouble()
-                            OverlayService.refresh(context)
-                        },
-                        onReset = {
-                            simulateAngle = 0f
-                            TiltMath.simulatedAngleDeg = null
-                            OverlayService.refresh(context)
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
             }
         }
     }
 }
 
 @Composable
-private fun StatusCard(
-    hasOverlay: Boolean,
-    armed: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Privacy screen",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    if (armed) "Active - dims when tilted sideways"
-                    else "Stopped - screen is never dimmed",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    if (hasOverlay) "Overlay permission: granted"
-                    else "Overlay permission: not granted",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Switch(checked = armed, onCheckedChange = onToggle)
-        }
-    }
-}
-
-@Composable
-private fun ControlCard(
+private fun SliderCard(
     title: String,
-    subtitle: String,
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
@@ -271,44 +361,12 @@ private fun ControlCard(
 ) {
     Card {
         Column(Modifier.padding(16.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
-            Text(valueLabel, style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(title,Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                Text(valueLabel)
+            }
+            Spacer(Modifier.height(6.dp))
             Slider(value = value, onValueChange = onChange, valueRange = range)
-        }
-    }
-}
-
-@Composable
-private fun DebugCard(
-    angle: Float,
-    onChange: (Float) -> Unit,
-    onReset: () -> Unit
-) {
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                "Simulate tilt (debug)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "Used on emulators or phones without a usable rotation sensor.",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(String.format("%.0f degrees", angle))
-            Slider(
-                value = angle,
-                onValueChange = onChange,
-                valueRange = 0f..45f
-            )
-            Button(onClick = onReset) { Text("Stop simulation") }
         }
     }
 }

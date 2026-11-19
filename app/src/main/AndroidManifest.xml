@@ -3,9 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -25,17 +25,12 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".service.OverlayService"
+        <activity
+            android:name=".ReaderActivity"
             android:exported="false" />
 
-        <receiver
-            android:name=".debug.DebugReceiver"
-            android:exported="true"
-            tools:ignore="ExportedReceiver">
-            <intent-filter>
-                <action android:name="com.privacyhub.app.DEBUG_SET_TILT" />
-            </intent-filter>
-        </receiver>
+        <service
+            android:name=".service.MaskService"
+            android:exported="false" />
     </application>
 </manifest>
