@@ -195,9 +195,6 @@ class MaskService : Service() {
     // ---- smooth drag: one full-screen repaint instead of 6 window repositions ----
     private fun beginDrag() {
         if (dragMask != null) return
-        topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
-        leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
-        moveView?.alpha = 0f; resizeView?.alpha = 0f
         val dm = object : MaskView(this) {
             private val hFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 16, 32, 56) }
             private val hStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -235,6 +232,11 @@ class MaskService : Service() {
         ).apply { gravity = Gravity.TOP or Gravity.START }
         dragMask = dm
         runCatching { windowManager.addView(dm, p) }
+        // Hide strips/handles only AFTER the drag mask is up, so there is no
+        // frame where the screen is unmasked (that gap was the tap/drag flash).
+        topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
+        leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
+        moveView?.alpha = 0f; resizeView?.alpha = 0f
     }
 
     private fun updateDrag() {
@@ -242,12 +244,14 @@ class MaskService : Service() {
     }
 
     private fun endDrag() {
-        dragMask?.let { runCatching { windowManager.removeView(it) } }
-        dragMask = null
+        // Restore + reposition the strips/handles FIRST while the drag mask still
+        // covers the screen, then remove the drag mask — no unmasked flash.
         topStrip?.visibility = View.VISIBLE; bottomStrip?.visibility = View.VISIBLE
         leftStrip?.visibility = View.VISIBLE; rightStrip?.visibility = View.VISIBLE
         moveView?.alpha = 1f; resizeView?.alpha = 1f
         persistAndRender()
+        dragMask?.let { runCatching { windowManager.removeView(it) } }
+        dragMask = null
     }
 
     // ---- aperture move / resize ----
