@@ -20,6 +20,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import com.privacyhub.app.privacy.HandleKind
 import com.privacyhub.app.privacy.HandleView
@@ -121,7 +122,7 @@ class MaskService : Service() {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
         PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP or Gravity.START }
+    ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
 
     private fun addStrips() {
         if (topStrip != null) return
@@ -155,7 +156,7 @@ class MaskService : Service() {
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP or Gravity.START }
+    ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
 
     private fun place(view: View?, p: WindowManager.LayoutParams?, x: Int, y: Int, w: Int, h: Int) {
         if (view == null || p == null) return
@@ -229,14 +230,16 @@ class MaskService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply { gravity = Gravity.TOP or Gravity.START; windowAnimations = 0 }
         dragMask = dm
         runCatching { windowManager.addView(dm, p) }
-        // Hide strips/handles only AFTER the drag mask is up, so there is no
-        // frame where the screen is unmasked (that gap was the tap/drag flash).
-        topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
-        leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
-        moveView?.alpha = 0f; resizeView?.alpha = 0f
+        // Hide the strips in the SAME frame the drag mask first draws, so there is
+        // never a frame with no mask composited (that gap was the flicker).
+        dm.onceOnPreDraw {
+            topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
+            leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
+            moveView?.alpha = 0f; resizeView?.alpha = 0f
+        }
     }
 
     private fun updateDrag() {
@@ -244,14 +247,20 @@ class MaskService : Service() {
     }
 
     private fun endDrag() {
-        // Restore + reposition the strips/handles FIRST while the drag mask still
-        // covers the screen, then remove the drag mask — no unmasked flash.
+        val dm = dragMask ?: return
+        dragMask = null
+        // Restore + reposition the strips under the still-present drag mask, then
+        // remove the drag mask only AFTER the strips have drawn (no unmasked frame).
         topStrip?.visibility = View.VISIBLE; bottomStrip?.visibility = View.VISIBLE
         leftStrip?.visibility = View.VISIBLE; rightStrip?.visibility = View.VISIBLE
         moveView?.alpha = 1f; resizeView?.alpha = 1f
         persistAndRender()
-        dragMask?.let { runCatching { windowManager.removeView(it) } }
-        dragMask = null
+        val ts = topStrip
+        if (ts != null) {
+            ts.onceOnPreDraw { handler.post { runCatching { windowManager.removeView(dm) } } }
+        } else {
+            runCatching { windowManager.removeView(dm) }
+        }
     }
 
     // ---- aperture move / resize ----
@@ -362,4 +371,16 @@ class MaskService : Service() {
             context.startService(Intent(context, MaskService::class.java).setAction(ACTION_STOP))
         }
     }
+}
+
+
+/** Run [action] once, right before the next draw of this view (then detach). */
+private inline fun View.onceOnPreDraw(crossinline action: () -> Unit) {
+    viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+        override fun onPreDraw(): Boolean {
+            viewTreeObserver.removeOnPreDrawListener(this)
+            action()
+            return true
+        }
+    })
 }
