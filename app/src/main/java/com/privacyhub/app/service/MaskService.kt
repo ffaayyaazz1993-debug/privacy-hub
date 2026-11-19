@@ -222,7 +222,11 @@ class MaskService : Service() {
                     rf.right - rf.width() * 0.15f, rf.top + rf.height() * 0.25f, hStroke)
             }
         }
-        dm.config = config
+        // Match the resting strip mask exactly: sharp corners, no border. (The
+        // resting aperture is the rectangular gap between strips; a rounded drag
+        // preview would visibly morph chamfered<->sharp on tap/release.)
+        dm.showBorder = false
+        dm.config = config.copy(cornerRadiusDp = 0f)
         val p = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,

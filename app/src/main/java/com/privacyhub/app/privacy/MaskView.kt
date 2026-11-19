@@ -27,6 +27,8 @@ open class MaskView @JvmOverloads constructor(
             invalidate()
         }
 
+    var showBorder = true
+
     private val dimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
         style = Paint.Style.FILL
@@ -69,6 +71,6 @@ open class MaskView @JvmOverloads constructor(
         maskPath.addRoundRect(rect, radius, radius, Path.Direction.CW)
         canvas.drawPath(maskPath, dimPaint)
 
-        canvas.drawRoundRect(rect, radius, radius, borderPaint)
+        if (showBorder) canvas.drawRoundRect(rect, radius, radius, borderPaint)
     }
 }
