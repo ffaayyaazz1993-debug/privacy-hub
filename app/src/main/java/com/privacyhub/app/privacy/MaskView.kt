@@ -4,18 +4,17 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.RectF
+import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
 
 /**
  * Black scrim with a transparent rounded aperture.
  *
- * The CLEAR xfermode punches real transparency out of the layer, so the app
- * underneath remains visible through the hole instead of merely being painted a
- * lighter colour.
+ * Drawn as ONE even-odd path (outer rect + inner rounded rect). No xfermode and
+ * no hardware layer: a screen-sized hardware layer over every app can exhaust
+ * GPU memory and hang the compositor on low-end phones. A single path fill is
+ * cheap and renders identically.
  */
 class MaskView @JvmOverloads constructor(
     context: Context,
@@ -30,10 +29,7 @@ class MaskView @JvmOverloads constructor(
 
     private val dimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
-    }
-
-    private val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        style = Paint.Style.FILL
     }
 
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -42,16 +38,17 @@ class MaskView @JvmOverloads constructor(
         color = Color.argb(90, 255, 255, 255)
     }
 
+    private val maskPath = Path()
+
     init {
-        setLayerType(LAYER_TYPE_HARDWARE, null)
+        // Explicitly no layer; default software/hardware view rendering is fine
+        // for a single path and avoids a full-screen GPU texture.
+        setLayerType(LAYER_TYPE_NONE, null)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
-
-        dimPaint.alpha = (config.dimAlpha * 255f).toInt().coerceIn(0, 255)
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
 
         val rect = MaskStore.apertureRectF(
             width,
@@ -63,7 +60,15 @@ class MaskView @JvmOverloads constructor(
             config,
             resources.displayMetrics.density
         )
-        canvas.drawRoundRect(rect, radius, radius, clearPaint)
+
+        dimPaint.alpha = (config.dimAlpha * 255f).toInt().coerceIn(0, 255)
+
+        maskPath.reset()
+        maskPath.fillType = Path.FillType.EVEN_ODD
+        maskPath.addRect(0f, 0f, width.toFloat(), height.toFloat(), Path.Direction.CW)
+        maskPath.addRoundRect(rect, radius, radius, Path.Direction.CW)
+        canvas.drawPath(maskPath, dimPaint)
+
         canvas.drawRoundRect(rect, radius, radius, borderPaint)
     }
 }

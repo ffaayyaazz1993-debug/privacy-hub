@@ -165,6 +165,9 @@ class MaskService : Service() {
         y: Int
     ) {
         if (view == null || params == null) return
+        if (params.x == x && params.y == y &&
+            params.width == handleSizePx && params.height == handleSizePx
+        ) return
         params.x = x
         params.y = y
         params.width = handleSizePx
@@ -201,11 +204,14 @@ class MaskService : Service() {
                         right = left + w,
                         bottom = top + h
                     ),
-                    save = true
+                    save = false
                 )
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> return true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MaskStore.save(this, config)
+                return true
+            }
         }
         return false
     }
@@ -234,11 +240,14 @@ class MaskService : Service() {
                     .coerceAtMost(1f)
                 setConfig(
                     config.copy(right = right, bottom = bottom),
-                    save = true
+                    save = false
                 )
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> return true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MaskStore.save(this, config)
+                return true
+            }
         }
         return false
     }
