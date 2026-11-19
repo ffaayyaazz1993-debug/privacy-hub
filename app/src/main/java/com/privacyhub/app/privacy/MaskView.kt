@@ -16,7 +16,7 @@ import android.view.View
  * GPU memory and hang the compositor on low-end phones. A single path fill is
  * cheap and renders identically.
  */
-class MaskView @JvmOverloads constructor(
+open class MaskView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
@@ -46,7 +46,7 @@ class MaskView @JvmOverloads constructor(
         setLayerType(LAYER_TYPE_NONE, null)
     }
 
-    override fun onDraw(canvas: Canvas) {
+    open override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
 

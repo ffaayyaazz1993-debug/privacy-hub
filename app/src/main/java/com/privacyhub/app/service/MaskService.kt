@@ -6,7 +6,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.os.Build
@@ -22,6 +24,7 @@ import com.privacyhub.app.privacy.HandleKind
 import com.privacyhub.app.privacy.HandleView
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
+import com.privacyhub.app.privacy.MaskView
 
 /**
  * System-wide blackout mask with a viewing window.
@@ -52,6 +55,7 @@ class MaskService : Service() {
     private var rightParams: WindowManager.LayoutParams? = null
     private var moveParams: WindowManager.LayoutParams? = null
     private var resizeParams: WindowManager.LayoutParams? = null
+    private var dragMask: MaskView? = null
 
     private var config: MaskConfig = MaskStore.DEFAULT
     private var running = false
@@ -185,6 +189,64 @@ class MaskService : Service() {
         positionAll()
     }
 
+    // ---- smooth drag: one full-screen repaint instead of 6 window repositions ----
+    private fun beginDrag() {
+        if (dragMask != null) return
+        topStrip?.visibility = View.GONE; bottomStrip?.visibility = View.GONE
+        leftStrip?.visibility = View.GONE; rightStrip?.visibility = View.GONE
+        moveView?.alpha = 0f; resizeView?.alpha = 0f
+        val dm = object : MaskView(this) {
+            private val hFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 16, 32, 56) }
+            private val hStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE; strokeWidth = 3f; color = Color.argb(220, 255, 255, 255)
+            }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                if (width == 0 || height == 0) return
+                val r = MaskStore.apertureRectF(width, height, config, resources.displayMetrics.density)
+                val hs = handleSizePx.toFloat()
+                drawMove(canvas, r.centerX(), r.bottom, hs)
+                drawResize(canvas, r.right, r.bottom, hs)
+            }
+            private fun drawMove(c: Canvas, cx: Float, cy: Float, s: Float) {
+                val rad = s / 2f - 3f
+                c.drawCircle(cx, cy, rad, hFill); c.drawCircle(cx, cy, rad, hStroke)
+                c.drawLine(cx - rad * 0.45f, cy, cx + rad * 0.45f, cy, hStroke)
+                c.drawLine(cx, cy - rad * 0.45f, cx, cy + rad * 0.45f, hStroke)
+            }
+            private fun drawResize(c: Canvas, cx: Float, cy: Float, s: Float) {
+                val rf = android.graphics.RectF(cx - s / 2f + 3f, cy - s / 2f + 3f, cx + s / 2f - 3f, cy + s / 2f - 3f)
+                c.drawRect(rf, hFill); c.drawRect(rf, hStroke)
+                c.drawLine(rf.left + rf.width() * 0.25f, rf.top + rf.height() * 0.75f,
+                    rf.right - rf.width() * 0.15f, rf.top + rf.height() * 0.25f, hStroke)
+            }
+        }
+        dm.config = config
+        val p = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        dragMask = dm
+        runCatching { windowManager.addView(dm, p) }
+    }
+
+    private fun updateDrag() {
+        dragMask?.config = config
+    }
+
+    private fun endDrag() {
+        dragMask?.let { runCatching { windowManager.removeView(it) } }
+        dragMask = null
+        topStrip?.visibility = View.VISIBLE; bottomStrip?.visibility = View.VISIBLE
+        leftStrip?.visibility = View.VISIBLE; rightStrip?.visibility = View.VISIBLE
+        moveView?.alpha = 1f; resizeView?.alpha = 1f
+        persistAndRender()
+    }
+
     // ---- aperture move / resize ----
     private var startRawX = 0f; private var startRawY = 0f
     private var startLeft = 0f; private var startTop = 0f
@@ -195,16 +257,16 @@ class MaskService : Service() {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 startRawX = e.rawX; startRawY = e.rawY
-                startLeft = config.left; startTop = config.top; return true
+                startLeft = config.left; startTop = config.top; beginDrag(); return true
             }
             MotionEvent.ACTION_MOVE -> {
                 val cw = config.right - config.left; val ch = config.bottom - config.top
                 val left = (startLeft + (e.rawX - startRawX) / w).coerceIn(0f, 1f - cw)
                 val top = (startTop + (e.rawY - startRawY) / h).coerceIn(0f, 1f - ch)
                 config = config.copy(left = left, top = top, right = left + cw, bottom = top + ch)
-                positionAll(); return true
+                updateDrag(); return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { persistAndRender(); return true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { endDrag(); return true }
         }
         return false
     }
@@ -216,15 +278,15 @@ class MaskService : Service() {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 startRawX = e.rawX; startRawY = e.rawY
-                startRight = config.right; startBottom = config.bottom; return true
+                startRight = config.right; startBottom = config.bottom; beginDrag(); return true
             }
             MotionEvent.ACTION_MOVE -> {
                 val right = (startRight + (e.rawX - startRawX) / w).coerceAtLeast(config.left + 0.06f).coerceAtMost(1f)
                 val bottom = (startBottom + (e.rawY - startRawY) / h).coerceAtLeast(config.top + 0.06f).coerceAtMost(1f)
                 config = config.copy(right = right, bottom = bottom)
-                positionAll(); return true
+                updateDrag(); return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { persistAndRender(); return true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { endDrag(); return true }
         }
         return false
     }
@@ -262,11 +324,11 @@ class MaskService : Service() {
 
     private fun cleanup() {
         running = false
-        listOf(topStrip, bottomStrip, leftStrip, rightStrip, moveView, resizeView).forEach { v ->
+        listOf(topStrip, bottomStrip, leftStrip, rightStrip, moveView, resizeView, dragMask).forEach { v ->
             if (v != null) runCatching { windowManager.removeView(v) }
         }
         topStrip = null; bottomStrip = null; leftStrip = null; rightStrip = null
-        moveView = null; resizeView = null
+        moveView = null; resizeView = null; dragMask = null
         topParams = null; bottomParams = null; leftParams = null; rightParams = null
         moveParams = null; resizeParams = null
         if (::windowManager.isInitialized) runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
