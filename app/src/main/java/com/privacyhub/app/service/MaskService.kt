@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import com.privacyhub.app.privacy.HandleKind
 import com.privacyhub.app.privacy.HandleView
@@ -59,6 +60,8 @@ class MaskService : Service() {
 
     private var config: MaskConfig = MaskStore.DEFAULT
     private var running = false
+
+    private val touchSlop: Int get() = ViewConfiguration.get(this).scaledTouchSlop
 
     private val handleSizePx: Int
         get() = (56 * resources.displayMetrics.density).toInt()
@@ -257,16 +260,19 @@ class MaskService : Service() {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 startRawX = e.rawX; startRawY = e.rawY
-                startLeft = config.left; startTop = config.top; beginDrag(); return true
+                startLeft = config.left; startTop = config.top; return true
             }
             MotionEvent.ACTION_MOVE -> {
+                val dx = e.rawX - startRawX; val dy = e.rawY - startRawY
+                if (dragMask == null && dx * dx + dy * dy < touchSlop * touchSlop) return true
                 val cw = config.right - config.left; val ch = config.bottom - config.top
-                val left = (startLeft + (e.rawX - startRawX) / w).coerceIn(0f, 1f - cw)
-                val top = (startTop + (e.rawY - startRawY) / h).coerceIn(0f, 1f - ch)
+                val left = (startLeft + dx / w).coerceIn(0f, 1f - cw)
+                val top = (startTop + dy / h).coerceIn(0f, 1f - ch)
                 config = config.copy(left = left, top = top, right = left + cw, bottom = top + ch)
+                if (dragMask == null) beginDrag()
                 updateDrag(); return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { endDrag(); return true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { if (dragMask != null) endDrag(); return true }
         }
         return false
     }
@@ -278,15 +284,18 @@ class MaskService : Service() {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 startRawX = e.rawX; startRawY = e.rawY
-                startRight = config.right; startBottom = config.bottom; beginDrag(); return true
+                startRight = config.right; startBottom = config.bottom; return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val right = (startRight + (e.rawX - startRawX) / w).coerceAtLeast(config.left + 0.06f).coerceAtMost(1f)
-                val bottom = (startBottom + (e.rawY - startRawY) / h).coerceAtLeast(config.top + 0.06f).coerceAtMost(1f)
+                val dx = e.rawX - startRawX; val dy = e.rawY - startRawY
+                if (dragMask == null && dx * dx + dy * dy < touchSlop * touchSlop) return true
+                val right = (startRight + dx / w).coerceAtLeast(config.left + 0.06f).coerceAtMost(1f)
+                val bottom = (startBottom + dy / h).coerceAtLeast(config.top + 0.06f).coerceAtMost(1f)
                 config = config.copy(right = right, bottom = bottom)
+                if (dragMask == null) beginDrag()
                 updateDrag(); return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { endDrag(); return true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { if (dragMask != null) endDrag(); return true }
         }
         return false
     }
