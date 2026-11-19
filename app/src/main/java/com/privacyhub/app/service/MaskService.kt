@@ -62,6 +62,10 @@ class MaskService : Service() {
     }
 
     private fun startMask() {
+        if (running) {
+            applyConfig()
+            return
+        }
         try {
             if (!Settings.canDrawOverlays(this)) {
                 stopSelf()
@@ -84,6 +88,7 @@ class MaskService : Service() {
     }
 
     private fun addMask() {
+        if (maskView != null) return
         val view = MaskView(this)
         view.config = config
         val params = WindowManager.LayoutParams(
@@ -103,6 +108,7 @@ class MaskService : Service() {
     }
 
     private fun addHandles() {
+        if (moveView != null || resizeView != null) return
         val wm = windowManager ?: return
 
         val move = HandleView(this, kind = HandleKind.MOVE)
@@ -255,11 +261,17 @@ class MaskService : Service() {
     private fun setConfig(next: MaskConfig, save: Boolean) {
         config = MaskStore.normalize(next)
         if (save) MaskStore.save(this, config)
-        applyConfig()
+        renderConfig()
     }
 
+    /** Reload persisted config (external update / start). */
     private fun applyConfig() {
         config = MaskStore.load(this)
+        renderConfig()
+    }
+
+    /** Apply the current in-memory config without re-reading prefs. */
+    private fun renderConfig() {
         maskView?.config = config
         maskView?.invalidate()
         positionHandles()
