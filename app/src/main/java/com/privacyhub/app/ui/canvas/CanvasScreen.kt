@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +47,8 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
     val nodes by vm.nodes.collectAsStateWithLifecycle()
     val selected = nodes.find { it.id == vm.selectedId }
     var editing by remember { mutableStateOf<NodeEntity?>(null) }
+    var showStats by remember { mutableStateOf(false) }
+    var historyFor by remember { mutableStateOf<Long?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         MindMapCanvas(vm, Modifier.fillMaxSize())
@@ -64,16 +67,23 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
                 IconButton(onClick = { vm.zoomOut() }) { Icon(Icons.Rounded.ZoomOut, contentDescription = "Zoom out") }
                 IconButton(onClick = { vm.autoArrange() }) { Icon(Icons.Rounded.AutoFixHigh, contentDescription = "Auto arrange") }
                 IconButton(onClick = { vm.requestFit() }) { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = "Fit to screen") }
+                IconButton(onClick = { showStats = true }) { Icon(Icons.Rounded.Info, contentDescription = "Project statistics") }
                 IconButton(onClick = { vm.undo() }, enabled = vm.undoCount > 0) { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "Undo") }
                 IconButton(onClick = { vm.redo() }, enabled = vm.redoCount > 0) { Icon(Icons.AutoMirrored.Rounded.Redo, contentDescription = "Redo") }
             }
         }
         if (selected != null) {
-            NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) }, modifier = Modifier.align(Alignment.BottomCenter))
+            NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) }, onHistory = { historyFor = selected.id }, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
 
     editing?.let { n ->
         NodeEditDialog(node = n, onDismiss = { editing = null }, onSave = { vm.updateNode(it); editing = null })
     }
+    if (showStats) {
+        val ns by vm.nodes.collectAsStateWithLifecycle()
+        val ss by vm.projectSessions.collectAsStateWithLifecycle()
+        ProjectStatsDialog(nodes = ns, sessions = ss, onDismiss = { showStats = false })
+    }
+    historyFor?.let { id -> NodeHistoryDialog(nodeId = id, onDismiss = { historyFor = null }) }
 }

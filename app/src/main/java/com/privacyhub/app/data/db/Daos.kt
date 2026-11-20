@@ -34,6 +34,7 @@ interface NodeDao {
     @Query("SELECT * FROM nodes WHERE id = :id") fun observe(id: Long): Flow<NodeEntity?>
     @Query("SELECT * FROM nodes WHERE id = :id") suspend fun get(id: Long): NodeEntity?
     @Query("SELECT * FROM nodes WHERE projectId = :projectId") fun observeByProject(projectId: Long): Flow<List<NodeEntity>>
+    @Query("SELECT * FROM nodes") fun observeAll(): Flow<List<NodeEntity>>
     @Query("SELECT * FROM nodes WHERE projectId = :projectId") suspend fun getByProject(projectId: Long): List<NodeEntity>
     @Query("SELECT * FROM nodes WHERE parentId = :parentId") suspend fun childrenOf(parentId: Long): List<NodeEntity>
     @Query("SELECT COUNT(*) FROM nodes WHERE projectId = :projectId") fun countByProject(projectId: Long): Flow<Int>
@@ -56,6 +57,7 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE nodeId = :nodeId ORDER BY startTimestamp DESC") fun observeByNode(nodeId: Long): Flow<List<FocusSessionEntity>>
     @Query("SELECT * FROM sessions WHERE projectId = :projectId ORDER BY startTimestamp DESC") fun observeByProject(projectId: Long): Flow<List<FocusSessionEntity>>
     @Query("SELECT * FROM sessions ORDER BY startTimestamp DESC") fun observeAll(): Flow<List<FocusSessionEntity>>
+    @Query("SELECT * FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS' ORDER BY endTimestamp DESC LIMIT 1") fun latestCompletedFocus(): Flow<FocusSessionEntity?>
     @Query("SELECT * FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS' AND startTimestamp BETWEEN :from AND :to ORDER BY startTimestamp DESC")
     fun completedFocusBetween(from: Long, to: Long): Flow<List<FocusSessionEntity>>
     @Query("SELECT COALESCE(SUM(actualDurationSeconds),0) FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS' AND startTimestamp BETWEEN :from AND :to")

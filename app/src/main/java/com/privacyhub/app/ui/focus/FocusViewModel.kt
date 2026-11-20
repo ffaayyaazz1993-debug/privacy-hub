@@ -1,5 +1,8 @@
 package com.privacyhub.app.ui.focus
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privacyhub.app.FocusMapApplication
@@ -7,6 +10,7 @@ import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
+import com.privacyhub.app.domain.model.NodeStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.domain.pomodoro.FocusSessionManager
 import com.privacyhub.app.domain.pomodoro.Pomodoro
@@ -63,6 +67,19 @@ class FocusViewModel(private val repo: FocusMapRepository) : ViewModel() {
     fun skip() { FocusSessionService.send(app, FocusSessionService.ACTION_SKIP) }
     fun complete() { FocusSessionService.send(app, FocusSessionService.ACTION_COMPLETE) }
     fun stop() { FocusSessionService.send(app, FocusSessionService.ACTION_STOP) }
+
+    val latestCompletedFocus: StateFlow<FocusSessionEntity?> = repo.sessions.latestCompletedFocus()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    var reviewDismissedId by mutableStateOf<Long?>(null)
+    fun dismissReview(id: Long) { reviewDismissedId = id }
+    fun saveReview(sessionId: Long, text: String, understood: Boolean?, revision: Boolean) {
+        viewModelScope.launch {
+            val s = repo.sessions.get(sessionId) ?: return@launch
+            repo.sessions.update(s.copy(review = text, understood = understood))
+            if (revision) repo.nodes.get(s.nodeId)?.let { repo.nodes.update(it.copy(status = NodeStatus.NEEDS_REVISION)) }
+            reviewDismissedId = sessionId
+        }
+    }
 
     fun updateNotes(text: String) {
         val s = active.value ?: return

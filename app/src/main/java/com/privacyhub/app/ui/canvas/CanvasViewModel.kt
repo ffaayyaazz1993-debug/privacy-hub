@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
@@ -21,6 +22,9 @@ import kotlinx.coroutines.launch
 class CanvasViewModel(private val repo: FocusMapRepository, val projectId: Long) : ViewModel() {
     val project: StateFlow<ProjectEntity?> = repo.projects.observe(projectId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val projectSessions: StateFlow<List<FocusSessionEntity>> = repo.sessions.observeByProject(projectId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _nodes = MutableStateFlow<List<NodeEntity>>(emptyList())
     val nodes: StateFlow<List<NodeEntity>> = _nodes

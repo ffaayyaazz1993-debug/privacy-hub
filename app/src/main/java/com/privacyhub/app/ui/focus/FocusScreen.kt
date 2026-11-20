@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +47,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
+import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.ui.repository
@@ -61,6 +63,7 @@ fun FocusScreen(onGoMaps: () -> Unit) {
     val progress by vm.progress.collectAsStateWithLifecycle()
     val project by vm.activeProject.collectAsStateWithLifecycle()
     val node by vm.activeNode.collectAsStateWithLifecycle()
+    val latest by vm.latestCompletedFocus.collectAsStateWithLifecycle()
 
     val s = active
     if (s == null) {
@@ -104,6 +107,11 @@ fun FocusScreen(onGoMaps: () -> Unit) {
             Button(onClick = { vm.complete() }) { Text("Complete") }
             OutlinedButton(onClick = { vm.stop() }) { Text("End session") }
         }
+        val l = latest
+        if (l != null && l.id != vm.reviewDismissedId && System.currentTimeMillis() - (l.endTimestamp ?: 0L) < 600_000L) {
+            Spacer(Modifier.height(14.dp))
+            LearningReviewCard(l, vm)
+        }
         Spacer(Modifier.height(14.dp))
         FocusWindowRow()
         Spacer(Modifier.height(18.dp))
@@ -146,6 +154,26 @@ private fun FocusWindowRow() {
                 maskOn = on
                 MaskStore.setEnabled(context, on)
             })
+        }
+    }
+}
+
+
+@Composable
+private fun LearningReviewCard(session: FocusSessionEntity, vm: FocusViewModel) {
+    var text by remember(session.id) { mutableStateOf(session.review ?: "") }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(14.dp)) {
+            Text("What did you accomplish in this session?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth(),
+                label = { Text("Quick summary (optional)") }, minLines = 2)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { vm.saveReview(session.id, text, understood = true, revision = false) }) { Text("Understood") }
+                OutlinedButton(onClick = { vm.saveReview(session.id, text, understood = false, revision = true) }) { Text("Needs study") }
+                TextButton(onClick = { vm.dismissReview(session.id) }) { Text("Skip") }
+            }
         }
     }
 }
