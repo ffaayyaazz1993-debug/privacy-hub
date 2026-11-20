@@ -5,9 +5,23 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.privacyhub.app"
     compileSdk = 35
+
+    val localProps = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    signingConfigs {
+        create("release") {
+            localProps.getProperty("focusmap.keyStore")?.let { storeFile = file(it) }
+            storePassword = localProps.getProperty("focusmap.storePass")
+            keyAlias = localProps.getProperty("focusmap.keyAlias")
+            keyPassword = localProps.getProperty("focusmap.keyPass")
+        }
+    }
 
     defaultConfig {
         applicationId = "com.privacyhub.app"
@@ -25,6 +39,8 @@ android {
         }
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -73,4 +89,5 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.gson)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
 }

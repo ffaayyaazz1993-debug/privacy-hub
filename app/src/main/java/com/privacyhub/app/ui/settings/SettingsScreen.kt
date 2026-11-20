@@ -1,6 +1,8 @@
 package com.privacyhub.app.ui.settings
 
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -20,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -29,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,10 +45,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.privacyhub.app.data.export.BackupManager
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
 import com.privacyhub.app.ui.repository
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +90,8 @@ fun SettingsScreen() {
         } }
 
         FocusWindowCard()
+
+        DataCard()
 
         Card { Column(Modifier.padding(16.dp)) {
             Text("About", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -159,6 +167,47 @@ private fun FocusWindowCard() {
             Text("The viewing window stays uncovered, so touches pass through to the app beneath — no accessibility needed. " +
                 "This reduces visible distraction; it is not an optical privacy filter or an app blocker.",
                 style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+
+@Composable
+private fun DataCard() {
+    val context = LocalContext.current
+    val repo = repository()
+    val scope = rememberCoroutineScope()
+    val backup = remember { BackupManager(repo) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                val json = backup.exportJson()
+                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                msg = "Exported backup"
+            }.onFailure { msg = "Export failed: ${it.message}" }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: return@launch
+                val n = backup.importJson(json)
+                msg = "Imported $n project(s)"
+            }.onFailure { msg = "Import failed: ${it.message}" }
+        }
+    }
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text("Data & backup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Export projects, mind maps and session history as open JSON, or restore a backup. Import adds to your existing data.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { exportLauncher.launch("focusmap-backup.json") }) { Text("Export") }
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text("Import") }
+            }
+            msg?.let { Spacer(Modifier.height(6.dp)); Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
