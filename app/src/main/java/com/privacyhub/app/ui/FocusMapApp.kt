@@ -1,0 +1,99 @@
+package com.privacyhub.app.ui
+
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.privacyhub.app.data.db.UserSettingsEntity
+import com.privacyhub.app.ui.analytics.AnalyticsScreen
+import com.privacyhub.app.ui.canvas.CanvasScreen
+import com.privacyhub.app.ui.focus.FocusScreen
+import com.privacyhub.app.ui.home.HomeScreen
+import com.privacyhub.app.ui.maps.MapsScreen
+import com.privacyhub.app.ui.settings.SettingsScreen
+import com.privacyhub.app.ui.theme.FocusMapTheme
+
+private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+@Composable
+fun FocusMapApp() {
+    val repo = repository()
+    val settings by repo.observeSettings().collectAsStateWithLifecycle(initialValue = UserSettingsEntity())
+    LaunchedEffect(Unit) { repo.ensureSettings() }
+
+    FocusMapTheme(themeMode = settings.theme) {
+        val nav = rememberNavController()
+        val backStack by nav.currentBackStackEntryAsState()
+        val currentRoute = backStack?.destination?.route
+        val tabs = listOf(
+            Tab(Routes.HOME, "Home", Icons.Rounded.Home),
+            Tab(Routes.MAPS, "Maps", Icons.Rounded.Hub),
+            Tab(Routes.FOCUS, "Focus", Icons.Rounded.Timer),
+            Tab(Routes.ANALYTICS, "Analytics", Icons.Rounded.BarChart),
+            Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
+        )
+        val showBar = tabs.any { it.route == currentRoute }
+        Scaffold(
+            bottomBar = {
+                if (showBar) NavigationBar {
+                    tabs.forEach { t ->
+                        NavigationBarItem(
+                            selected = currentRoute == t.route,
+                            onClick = {
+                                nav.navigate(t.route) {
+                                    popUpTo(Routes.HOME) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(t.icon, contentDescription = t.label) },
+                            label = { Text(t.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+            }
+        ) { padding ->
+            NavHost(navController = nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
+                composable(Routes.HOME) {
+                    HomeScreen(
+                        onOpenProject = { nav.navigate(Routes.canvas(it)) },
+                        onGoMaps = { nav.navigate(Routes.MAPS) },
+                        onGoFocus = { nav.navigate(Routes.FOCUS) },
+                    )
+                }
+                composable(Routes.MAPS) { MapsScreen(onOpenProject = { nav.navigate(Routes.canvas(it)) }) }
+                composable(Routes.FOCUS) { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) }
+                composable(Routes.ANALYTICS) { AnalyticsScreen() }
+                composable(Routes.SETTINGS) { SettingsScreen() }
+                composable(
+                    Routes.CANVAS,
+                    arguments = listOf(navArgument("projectId") { type = NavType.LongType }),
+                ) { entry ->
+                    val pid = entry.arguments?.getLong("projectId") ?: 0L
+                    CanvasScreen(projectId = pid, onBack = { nav.popBackStack() })
+                }
+            }
+        }
+    }
+}

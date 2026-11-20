@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Privacy Screen — Competitive Analysis (Porter)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2a3342;
+    --txt:#e6edf3; --mut:#9aa7b8; --dim:#6b7686;
+    --acc:#4cc2ff; --good:#3fb97f; --warn:#e0a24a; --bad:#e05c5c;
+    --chip:#232c3b;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  @media print{
+    body{padding:26px 22px;}
+    .force,.grp,.strat,.card,.callout,ol.reco li{break-inside:avoid; page-break-inside:avoid;}
+    h2{break-after:avoid; page-break-after:avoid;}
+    header{break-after:avoid;}
+  }
+  body{
+    background:linear-gradient(180deg,#0b0f14,#0d1117 240px);
+    color:var(--txt);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; padding:40px 20px 80px;
+  }
+  .wrap{max-width:920px; margin:0 auto;}
+  header{border-bottom:1px solid var(--line); padding-bottom:26px; margin-bottom:30px;}
+  .kicker{color:var(--acc); letter-spacing:.18em; text-transform:uppercase; font-size:12px; font-weight:600;}
+  h1{font-size:32px; font-weight:700; margin:8px 0 6px; letter-spacing:-.01em;}
+  .sub{color:var(--mut); font-size:15px;}
+  .meta{color:var(--dim); font-size:12.5px; margin-top:12px;}
+  h2{font-size:20px; margin:40px 0 6px; font-weight:700;}
+  h2 .n{color:var(--acc); font-weight:700; margin-right:8px;}
+  .lede{color:var(--mut); font-size:14.5px; margin-bottom:18px;}
+  p{margin:8px 0;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:12px 0;}
+  /* Five forces */
+  .force{display:flex; gap:16px; align-items:flex-start; background:var(--panel); border:1px solid var(--line);
+         border-radius:12px; padding:16px 18px; margin:10px 0;}
+  .force .body{flex:1;}
+  .force h3{font-size:15.5px; font-weight:600; margin-bottom:4px;}
+  .force p{color:var(--mut); font-size:13.5px; margin:0;}
+  .badge{flex:0 0 auto; font-size:11px; font-weight:700; letter-spacing:.06em; padding:5px 10px; border-radius:20px;
+         text-transform:uppercase; white-space:nowrap; margin-top:2px;}
+  .b-high{background:rgba(224,92,92,.15); color:var(--bad); border:1px solid rgba(224,92,92,.4);}
+  .b-mod{background:rgba(224,162,74,.15); color:var(--warn); border:1px solid rgba(224,162,74,.4);}
+  .b-low{background:rgba(63,185,127,.15); color:var(--good); border:1px solid rgba(63,185,127,.4);}
+  .meter{height:4px; border-radius:2px; background:var(--chip); margin-top:10px; overflow:hidden;}
+  .meter i{display:block; height:100%; border-radius:2px;}
+  .callout{border-left:3px solid var(--bad); background:rgba(224,92,92,.07); border-radius:8px;
+           padding:16px 18px; margin:18px 0; font-size:14.5px;}
+  .callout.good{border-color:var(--good); background:rgba(63,185,127,.07);}
+  .callout.acc{border-color:var(--acc); background:rgba(76,194,255,.07);}
+  .callout b{color:var(--txt);}
+  /* competitor groups */
+  .grp{display:flex; gap:14px; padding:13px 16px; border:1px solid var(--line); border-radius:10px; margin:8px 0; background:var(--panel);}
+  .grp .tag{flex:0 0 30px; height:30px; border-radius:8px; background:var(--chip); color:var(--acc);
+            display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;}
+  .grp .t{font-weight:600; font-size:14.5px;}
+  .grp .d{color:var(--mut); font-size:13px; margin-top:2px;}
+  .grp .apps{color:var(--dim); font-size:12.5px; margin-top:3px;}
+  .grp.hot{border-color:rgba(76,194,255,.5); background:rgba(76,194,255,.05);}
+  .pill{display:inline-block; font-size:11px; padding:2px 8px; border-radius:12px; background:var(--chip); color:var(--mut); margin-left:6px;}
+  /* generic strategies */
+  .strat{display:flex; gap:14px; align-items:center; background:var(--panel); border:1px solid var(--line);
+         border-radius:12px; padding:15px 18px; margin:10px 0;}
+  .strat .verdict{flex:0 0 92px; text-align:center; font-weight:700; font-size:12px; letter-spacing:.05em;
+                  padding:8px 6px; border-radius:8px; text-transform:uppercase;}
+  .v-no{background:rgba(224,92,92,.15); color:var(--bad);}
+  .v-weak{background:rgba(224,162,74,.15); color:var(--warn);}
+  .v-yes{background:rgba(63,185,127,.18); color:var(--good);}
+  .strat h3{font-size:15px;} .strat p{color:var(--mut); font-size:13.5px; margin:2px 0 0;}
+  ul{margin:8px 0 8px 20px;} li{margin:6px 0; color:var(--mut); font-size:14px;}
+  li b, p b{color:var(--txt);}
+  ol.reco{margin:10px 0 0 0; counter-reset:r; list-style:none;}
+  ol.reco li{counter-increment:r; position:relative; padding:12px 14px 12px 48px; background:var(--panel);
+             border:1px solid var(--line); border-radius:10px; margin:8px 0; color:var(--mut); font-size:14px;}
+  ol.reco li:before{content:counter(r); position:absolute; left:14px; top:13px; width:24px; height:24px;
+             border-radius:50%; background:var(--chip); color:var(--acc); font-weight:700; font-size:13px;
+             display:flex; align-items:center; justify-content:center;}
+  ol.reco li b{color:var(--txt);}
+  footer{margin-top:46px; padding-top:20px; border-top:1px solid var(--line); color:var(--dim); font-size:12px;}
+  .tagrow{margin-top:14px;}
+  .tagrow span{display:inline-block; font-size:11.5px; color:var(--mut); background:var(--chip);
+               border:1px solid var(--line); padding:4px 10px; border-radius:14px; margin:0 6px 6px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">Marketing Strategy · Competitive Analysis</div>
+    <h1>Smart Privacy Screen</h1>
+    <div class="sub">A Michael Porter–style read on the shoulder-surfing / screen-privacy app market.</div>
+    <div class="meta">Framework: Porter’s Five Forces · Generic Strategies · Strategic Groups &nbsp;·&nbsp; Grounded in live Play Store competitors &nbsp;·&nbsp; Nov 2026</div>
+    <div class="tagrow">
+      <span>Software privacy utility</span><span>Not optical protection</span><span>Android overlay</span><span>Freemium candidate</span>
+    </div>
+  </header>
+
+  <div class="callout acc">
+    <b>Define the business by the need, not the product.</b> You’re not selling “a blackout overlay” — you’re selling
+    <b>protection from shoulder-surfing in public</b>. The need is real, but software is physically limited (it dims for
+    everyone; it can’t narrow viewing angles). That single fact drives every force below.
+  </div>
+
+  <h2><span class="n">01</span>Five Forces — is this an attractive market?</h2>
+  <div class="lede">Porter’s test of segment attractiveness. High forces = thin, fragile margins.</div>
+
+  <div class="force">
+    <div class="body">
+      <h3>Threat of new entrants</h3>
+      <p>A simple overlay, no capital, no proprietary IP, free Play Store distribution. A working clone can be built in days — the store is already full of near-identical “Screen Guard / Privacy Filter” apps.</p>
+      <div class="meter"><i style="width:92%; background:var(--bad);"></i></div>
+    </div>
+    <span class="badge b-high">High</span>
+  </div>
+
+  <div class="force">
+    <div class="body">
+      <h3>Rivalry among existing competitors</h3>
+      <p>Dozens of undifferentiated apps (Screen Guard, Redact, Privacy Display, Tilt Veil, VEIL…). They compete on keyword-stuffed listings and free/freemium pricing, not capability. Zero switching cost → a price-and-ASO war.</p>
+      <div class="meter"><i style="width:90%; background:var(--bad);"></i></div>
+    </div>
+    <span class="badge b-high">High</span>
+  </div>
+
+  <div class="force">
+    <div class="body">
+      <h3>Threat of substitutes — the big one</h3>
+      <p>Hardware micro-louver protectors (3M, StarTech, ~$10–40) actually block side-view light; software can’t. OEM built-ins (Samsung S25 Privacy Display, HP Sure View, Dell SafeScreen) narrow angles electronically. Even lowering brightness substitutes. For the core optical job, substitutes are genuinely better.</p>
+      <div class="meter"><i style="width:95%; background:var(--bad);"></i></div>
+    </div>
+    <span class="badge b-high">High</span>
+  </div>
+
+  <div class="force">
+    <div class="body">
+      <h3>Bargaining power of buyers</h3>
+      <p>Many free alternatives, no lock-in, no switching cost, low involvement. Users install, try once, churn. Buyers hold all the power.</p>
+      <div class="meter"><i style="width:88%; background:var(--bad);"></i></div>
+    </div>
+    <span class="badge b-high">High</span>
+  </div>
+
+  <div class="force">
+    <div class="body">
+      <h3>Bargaining power of suppliers</h3>
+      <p>Concentrated in one “supplier”: the platform. Google Play takes 15–30%, sets policy, can delist you; Android controls the overlay/accessibility permissions the whole category depends on — one OS change can break the product. Dev tools/talent are low-power.</p>
+      <div class="meter"><i style="width:70%; background:var(--warn);"></i></div>
+    </div>
+    <span class="badge b-mod">Mod–High</span>
+  </div>
+
+  <div class="callout">
+    <b>Verdict: structurally unattractive — a classic “red ocean.”</b> High entry + high rivalry + strong substitutes +
+    buyer power = thin, fragile margins. Enter only with eyes open, and never on features or price alone.
+  </div>
+
+  <h2><span class="n">02</span>Competitor map — strategic groups</h2>
+  <div class="lede">Where each player sits, and who you actually compete with.</div>
+
+  <div class="grp"><div class="tag">A</div><div><div class="t">Commodity dimmers / tints</div><div class="d">Just darken everything. Crowded, free, no moat.</div><div class="apps">Screen Guard · Redact · most “screen filter” apps</div></div></div>
+  <div class="grp"><div class="tag">B</div><div><div class="t">“Angle-blocking” pattern apps</div><div class="d">Sell louvre / stripe / pixel-noise “side-view blocking.” Some claims are optically misleading — software stripes don’t redirect light.</div><div class="apps">Privacy Screen Display · Privacy Screen Guard</div></div></div>
+  <div class="grp hot"><div class="tag">C</div><div><div class="t">Viewing-window apps <span class="pill">our group</span></div><div class="d">Movable clear window over a darkened screen. This is where Smart Privacy Screen sits.</div><div class="apps">VEIL Pro (Reading Strip + Spotlight) · Smart Privacy Screen</div></div></div>
+  <div class="grp"><div class="tag">D</div><div><div class="t">Trigger / automation apps</div><div class="d">Compete on context-awareness rather than the window.</div><div class="apps">Tilt Veil (tilt-to-blackout) · Privacy Display (auto on app/screen/schedule)</div></div></div>
+  <div class="grp"><div class="tag">E</div><div><div class="t">Hardware / OEM</div><div class="d">Different physics, different price — the real optical answer.</div><div class="apps">3M / StarTech protectors · Samsung Privacy Display · HP Sure View</div></div></div>
+
+  <div class="callout">
+    <b>Closest direct rival: VEIL.</b> It already ships dim, blackout, a movable reading strip and spotlight, and lets taps
+    through — freemium, Android 8+. <b>Our headline feature is not unique.</b>
+  </div>
+
+  <h2><span class="n">03</span>Generic strategies — where can you win?</h2>
+  <div class="lede">Porter’s three routes to advantage, tested against this market.</div>
+
+  <div class="strat"><div class="verdict v-no">No</div><div><h3>Cost leadership</h3><p>You can’t undercut free, and it needs scale you don’t have.</p></div></div>
+  <div class="strat"><div class="verdict v-weak">Weak</div><div><h3>Broad differentiation</h3><p>Features are copyable in a weekend; VEIL already matches the window. No durable feature gap.</p></div></div>
+  <div class="strat"><div class="verdict v-yes">Viable</div><div><h3>Focus (niche)</h3><p>The only viable play. Pick a segment/use-case the generic dimmers serve badly and own it.</p></div></div>
+
+  <h2><span class="n">04</span>Is your advantage defensible? — the moat test</h2>
+  <div class="card">
+    <ul>
+      <li><b>Real engineering edge:</b> the uncovered-aperture design gives genuine system-wide touch passthrough with no accessibility — many rivals’ full-screen overlays block touch or lean on accessibility. Real, but replicable and invisible to users. <b>Not a moat.</b></li>
+      <li><b>Trust edge:</b> the category is full of misleading “blocks side viewing” claims; the honest “software privacy utility, not optical protection” stance stands out. But honesty alone doesn’t convert installs.</li>
+      <li><b>Missing:</b> no network effects, no switching costs, no scale economies, no brand yet. <b>Moat = weak.</b></li>
+    </ul>
+  </div>
+
+  <h2><span class="n">05</span>Recommended positioning</h2>
+  <div class="lede">What the forces imply you should actually do.</div>
+  <ol class="reco">
+    <li><b>Don’t fight the commodity dimmer war.</b> Differentiate on the one thing hardware can’t do: <b>dynamic, selective, reversible privacy</b>. A hardware filter is always-on and dims everything; your software can reveal a window, auto-trigger, and scope to specific apps.</li>
+    <li><b>Position as a complement to a hardware protector, not a replacement</b> — the “hybrid” approach security writers recommend. It’s honest and sidesteps the unwinnable optical claim.</li>
+    <li><b>Own a sharp use-case:</b> “read / bank privately in public over ANY app, with real touch” — commuters, open-plan offices, travelers. Narrow the focus until you’re the obvious choice for it.</li>
+    <li><b>Compete on trust + UX:</b> honest claims, no data collection (like Redact), smooth drag/resize, real passthrough. These are review-worthy in a spammy category.</li>
+    <li><b>Monetize freemium like VEIL:</b> free dim/blackout; paid window + automation + per-app rules.</li>
+    <li><b>Avoid the “blocks side view” claim</b> — the category’s biggest credibility / legal / review trap, and it contradicts the honest brand.</li>
+  </ol>
+
+  <div class="callout good">
+    <b>Bottom line:</b> an unattractive, crowded market with strong hardware substitutes. You won’t win on features or price.
+    The defensible path is a <b>focused niche + trustworthy branding + the dynamic/selective privacy hardware can’t match</b> —
+    sold as a complement to a physical filter, not a substitute for it.
+  </div>
+
+  <footer>
+    Smart Privacy Screen · Competitive analysis using Porter’s Five Forces &amp; Generic Strategies (via Kotler &amp; Keller, Marketing Management).
+    Competitor set sampled from Google Play, Nov 2026. Software reduces visible information; it does not physically block side-view light.
+  </footer>
+
+</div>
+</body>
+</html>

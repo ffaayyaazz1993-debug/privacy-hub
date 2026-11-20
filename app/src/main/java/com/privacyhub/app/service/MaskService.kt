@@ -377,8 +377,8 @@ class MaskService : Service() {
         else @Suppress("DEPRECATION") Notification.Builder(this)
         return builder
             .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setContentTitle("Smart Privacy Screen")
-            .setContentText("Viewing window active over your apps")
+            .setContentTitle("FocusMap — Focus Window")
+            .setContentText("Focus window active over your apps")
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_view, "Conceal", conceal)
             .addAction(android.R.drawable.ic_menu_view, "Reveal", reveal)
