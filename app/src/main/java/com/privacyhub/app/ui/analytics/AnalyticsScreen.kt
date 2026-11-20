@@ -43,6 +43,8 @@ fun AnalyticsScreen() {
     val daily by vm.daily.collectAsStateWithLifecycle()
     val byProject by vm.byProject.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
+    val byNode by vm.byNode.collectAsStateWithLifecycle()
+    val projectProgress by vm.projectProgress.collectAsStateWithLifecycle()
     val maxDay = daily.maxOfOrNull { it.seconds } ?: 0L
 
     LazyColumn(
@@ -92,6 +94,45 @@ fun AnalyticsScreen() {
                         Text("${pf.sessions} session" + (if (pf.sessions == 1) "" else "s"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         LinearProgressIndicator(progress = { pf.seconds.toFloat() / maxP }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        item { Text("Time by node", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        if (byNode.isEmpty()) {
+            item { Text("Complete a focus session on a node to see its time here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            val maxN = byNode.maxOfOrNull { it.seconds } ?: 1L
+            items(byNode, key = { "n" + it.nodeId }) { nf ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(nf.nodeTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(formatDuration(nf.seconds), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text("${nf.projectTitle} · ${nf.sessions} session" + (if (nf.sessions == 1) "" else "s"),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(progress = { nf.seconds.toFloat() / maxN }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        item { Text("Project completion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        if (projectProgress.isEmpty()) {
+            item { Text("Create a project to track completion.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            items(projectProgress, key = { "c" + it.project.id }) { pp ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(pp.project.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("${pp.completionPct}%", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Text("${pp.completedNodes}/${pp.totalNodes} nodes complete · ${pp.inProgress} in progress · ${pp.needsRevision} need revision",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(progress = { pp.completionPct / 100f }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }

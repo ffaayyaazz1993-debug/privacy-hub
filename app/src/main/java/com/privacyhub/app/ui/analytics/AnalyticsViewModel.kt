@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
+import com.privacyhub.app.domain.model.NodeStatus
 import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.util.startOfDay
@@ -21,6 +22,8 @@ import java.util.Locale
 data class DayFocus(val label: String, val seconds: Long)
 data class ProjectFocus(val project: ProjectEntity, val seconds: Long, val sessions: Int)
 data class HistoryItem(val session: FocusSessionEntity, val nodeTitle: String, val projectTitle: String)
+data class NodeFocus(val nodeId: Long, val nodeTitle: String, val projectTitle: String, val seconds: Long, val sessions: Int)
+data class ProjectProgress(val project: ProjectEntity, val totalNodes: Int, val completedNodes: Int, val inProgress: Int, val needsRevision: Int, val completionPct: Int)
 
 class AnalyticsViewModel(repo: FocusMapRepository) : ViewModel() {
     val todaySeconds: StateFlow<Long> = repo.sessions.focusSecondsBetween(startOfDay(), Long.MAX_VALUE)
@@ -51,6 +54,23 @@ class AnalyticsViewModel(repo: FocusMapRepository) : ViewModel() {
             val f = ss.filter { it.projectId == p.id && it.status == SessionStatus.COMPLETED && it.type == SessionType.FOCUS }
             ProjectFocus(p, f.sumOf { it.actualDurationSeconds.toLong() }, f.size)
         }.sortedByDescending { it.seconds }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val byNode: StateFlow<List<NodeFocus>> = combine(nodes, sessions, projects) { ns, ss, ps ->
+        val pmap = ps.associateBy { it.id }
+        ns.map { n ->
+            val f = ss.filter { it.nodeId == n.id && it.status == SessionStatus.COMPLETED && it.type == SessionType.FOCUS }
+            NodeFocus(n.id, n.title, pmap[n.projectId]?.title ?: "Project", f.sumOf { it.actualDurationSeconds.toLong() }, f.size)
+        }.filter { it.seconds > 0 }.sortedByDescending { it.seconds }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val projectProgress: StateFlow<List<ProjectProgress>> = combine(projects, nodes) { ps, ns ->
+        ps.map { p ->
+            val pn = ns.filter { it.projectId == p.id }
+            val done = pn.count { it.status == NodeStatus.COMPLETED }
+            ProjectProgress(p, pn.size, done, pn.count { it.status == NodeStatus.IN_PROGRESS },
+                pn.count { it.status == NodeStatus.NEEDS_REVISION }, if (pn.isEmpty()) 0 else done * 100 / pn.size)
+        }.sortedByDescending { it.completionPct }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val history: StateFlow<List<HistoryItem>> = combine(sessions, projects, nodes) { ss, ps, ns ->
