@@ -53,7 +53,8 @@ class BackupManager(private val repo: FocusMapRepository) {
 
     /** Returns the number of projects imported. Existing data is preserved. */
     suspend fun importJson(json: String): Int {
-        val backup = deserialize(json) ?: return 0
+        val backup = deserialize(json) ?: throw IllegalArgumentException("Invalid or unsupported FocusMap backup file")
+        if (backup.version > 1) throw IllegalArgumentException("Backup version ${backup.version} is newer than supported (1)")
         var count = 0
         for (p in backup.projects) {
             val newPid = repo.projects.insert(p.copy(id = 0, createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis()))

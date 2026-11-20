@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.domain.layout.MindMapLayout
+import com.privacyhub.app.domain.layout.ZoomMath
 
 private const val TOUCH_SLOP = 20f
 
@@ -90,11 +91,10 @@ fun MindMapCanvas(vm: CanvasViewModel, modifier: Modifier = Modifier) {
                                 val zoom = if (prevDist > 1f) curDist / prevDist else 1f
                                 val prevC = (pa + pb) / 2f
                                 val curC = (a.position + b.position) / 2f
-                                val pan = curC - prevC
                                 val old = vm.scale
                                 val newScale = (old * zoom).coerceIn(0.2f, 3f)
                                 val actual = newScale / old
-                                vm.offset = (curC + pan) - (curC - vm.offset) * actual
+                                vm.offset = ZoomMath.zoomOffset(curC, prevC, vm.offset, actual)
                                 vm.scale = newScale
                             }
                             prev[a.id] = a.position; prev[b.id] = b.position

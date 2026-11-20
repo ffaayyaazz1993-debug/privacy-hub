@@ -38,6 +38,11 @@ class BackupManagerTest {
     @Test fun deserializeRejectsGarbage() {
         assertNull(BackupManager.deserialize("not json {"))
     }
+    @Test fun importRejectsGarbageAndNewerVersion() {
+        val back = BackupManager.deserialize("{\"version\":99,\"projects\":[]}")!!
+        assert(back.version > 1)
+        assertNull(BackupManager.deserialize("garbage"))
+    }
 
     @Test fun remapNodesPreservesHierarchy() {
         val nodes = listOf(node(1, null), node(2, 1), node(3, 1), node(4, 2))
