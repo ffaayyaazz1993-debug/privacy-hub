@@ -31,6 +31,26 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
         return pid
     }
 
+    /** Duplicate a project and its full node tree (fresh ids, remapped parents). */
+    suspend fun duplicateProject(id: Long): Long? {
+        val p = projects.get(id) ?: return null
+        val now = System.currentTimeMillis()
+        val newPid = projects.insert(p.copy(id = 0, title = p.title + " (copy)", createdAt = now, updatedAt = now))
+        val tree = nodes.getByProject(id)
+        val idMap = HashMap<Long, Long>()
+        val remaining = tree.toMutableList()
+        while (remaining.isNotEmpty()) {
+            val ready = remaining.filter { it.parentId == null || idMap.containsKey(it.parentId) }
+            if (ready.isEmpty()) break
+            for (n in ready) {
+                val newId = nodes.insert(n.copy(id = 0, projectId = newPid, parentId = n.parentId?.let { idMap[it] }))
+                idMap[n.id] = newId
+            }
+            remaining.removeAll(ready.toSet())
+        }
+        return newPid
+    }
+
     /** Delete a node and its whole subtree, plus their sessions. */
     suspend fun deleteNodeSubtree(nodeId: Long) {
         val node = nodes.get(nodeId) ?: return

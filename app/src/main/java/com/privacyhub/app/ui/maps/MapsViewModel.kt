@@ -24,6 +24,11 @@ class MapsViewModel(private val repo: FocusMapRepository) : ViewModel() {
         if (title.isBlank()) return
         viewModelScope.launch { repo.createProject(title.trim(), category = category.trim()) }
     }
+    fun rename(id: Long, title: String) {
+        if (title.isBlank()) return
+        viewModelScope.launch { repo.projects.get(id)?.let { repo.projects.update(it.copy(title = title.trim(), updatedAt = System.currentTimeMillis())) } }
+    }
+    fun duplicate(id: Long) { viewModelScope.launch { repo.duplicateProject(id) } }
     fun delete(id: Long) {
         viewModelScope.launch { repo.sessions.deleteByProject(id); repo.projects.deleteById(id) }
     }
