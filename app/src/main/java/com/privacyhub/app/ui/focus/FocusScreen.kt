@@ -1,5 +1,8 @@
 package com.privacyhub.app.ui.focus
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Switch
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -20,20 +25,27 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.privacyhub.app.privacy.MaskStore
+import com.privacyhub.app.service.MaskService
 import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.ui.repository
@@ -92,8 +104,48 @@ fun FocusScreen(onGoMaps: () -> Unit) {
             Button(onClick = { vm.complete() }) { Text("Complete") }
             OutlinedButton(onClick = { vm.stop() }) { Text("End session") }
         }
+        Spacer(Modifier.height(14.dp))
+        FocusWindowRow()
         Spacer(Modifier.height(18.dp))
         OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.fillMaxWidth(),
             label = { Text("Session notes (optional)") }, minLines = 2)
+    }
+}
+
+
+@Composable
+private fun FocusWindowRow() {
+    val context = LocalContext.current
+    var refresh by remember { mutableStateOf(0) }
+    var maskOn by remember(refresh) { mutableStateOf(MaskStore.isEnabled(context)) }
+    val hasOverlay = remember(refresh) { Settings.canDrawOverlays(context) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refresh++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Focus Window", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    if (hasOverlay) "Dim distractions around a viewing window while you work"
+                    else "Overlay permission needed — tap the switch to grant",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = maskOn, onCheckedChange = { on ->
+                if (on) {
+                    if (!Settings.canDrawOverlays(context)) {
+                        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                        return@Switch
+                    }
+                    MaskService.start(context)
+                } else MaskService.stop(context)
+                maskOn = on
+                MaskStore.setEnabled(context, on)
+            })
+        }
     }
 }
