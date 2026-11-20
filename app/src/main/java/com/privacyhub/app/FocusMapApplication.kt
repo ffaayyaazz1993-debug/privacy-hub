@@ -19,11 +19,15 @@ class FocusMapApplication : Application() {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_FOCUS, "Focus sessions", NotificationManager.IMPORTANCE_LOW)
             )
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_COMPLETE, "Session completion", NotificationManager.IMPORTANCE_HIGH)
+            )
         }
     }
 
     companion object {
         const val CHANNEL_FOCUS = "focusmap_focus"
+        const val CHANNEL_COMPLETE = "focusmap_complete"
         lateinit var instance: FocusMapApplication
             private set
     }

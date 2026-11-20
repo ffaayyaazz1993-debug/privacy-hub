@@ -1,6 +1,13 @@
 package com.privacyhub.app.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Home
@@ -25,7 +32,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.data.db.UserSettingsEntity
+import com.privacyhub.app.domain.model.SessionType
+import com.privacyhub.app.domain.pomodoro.FocusSessionManager
+import com.privacyhub.app.service.FocusSessionService
+import kotlinx.coroutines.launch
 import com.privacyhub.app.ui.analytics.AnalyticsScreen
 import com.privacyhub.app.ui.canvas.CanvasScreen
 import com.privacyhub.app.ui.focus.FocusScreen
@@ -42,8 +54,24 @@ fun FocusMapApp() {
     val settings by repo.observeSettings().collectAsStateWithLifecycle(initialValue = UserSettingsEntity())
     LaunchedEffect(Unit) { repo.ensureSettings() }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val nav = rememberNavController()
+    LaunchedEffect(Unit) { if (repo.sessions.getActive() != null) FocusSessionService.start(context) }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    fun startFocus(node: NodeEntity) {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        scope.launch {
+            val st = repo.settings.get() ?: UserSettingsEntity()
+            FocusSessionManager(repo).start(node.projectId, node.id, SessionType.FOCUS, st.focusDurationSeconds)
+            FocusSessionService.start(context)
+            nav.navigate(Routes.FOCUS)
+        }
+    }
+
     FocusMapTheme(themeMode = settings.theme) {
-        val nav = rememberNavController()
         val backStack by nav.currentBackStackEntryAsState()
         val currentRoute = backStack?.destination?.route
         val tabs = listOf(
@@ -91,7 +119,7 @@ fun FocusMapApp() {
                     arguments = listOf(navArgument("projectId") { type = NavType.LongType }),
                 ) { entry ->
                     val pid = entry.arguments?.getLong("projectId") ?: 0L
-                    CanvasScreen(projectId = pid, onBack = { nav.popBackStack() })
+                    CanvasScreen(projectId = pid, onBack = { nav.popBackStack() }, onStartFocus = { node -> startFocus(node) })
                 }
             }
         }

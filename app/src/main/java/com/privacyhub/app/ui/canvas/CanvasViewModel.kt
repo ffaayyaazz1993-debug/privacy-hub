@@ -147,6 +147,17 @@ class CanvasViewModel(private val repo: FocusMapRepository, val projectId: Long)
 
     fun requestFit() { fitToScreen(viewportSize) }
 
+    fun zoomBy(factor: Float) {
+        val center = Offset(viewportSize.width / 2f, viewportSize.height / 2f)
+        val old = scale
+        val newScale = (old * factor).coerceIn(0.2f, 3f)
+        val actual = newScale / old
+        offset = center - (center - offset) * actual
+        scale = newScale
+    }
+    fun zoomIn() { zoomBy(1.25f) }
+    fun zoomOut() { zoomBy(0.8f) }
+
     fun fitToScreen(viewport: IntSize) {
         val b = MindMapLayout.bounds(_nodes.value) ?: return
         if (viewport.width == 0 || viewport.height == 0) return

@@ -69,6 +69,7 @@ interface SessionDao {
     @Query("SELECT COUNT(*) FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS' AND nodeId = :nodeId")
     fun completedCountByNode(nodeId: Long): Flow<Int>
     @Query("SELECT COUNT(*) FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS'") fun completedCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM sessions WHERE status = 'COMPLETED' AND type = 'FOCUS'") suspend fun completedFocusCount(): Int
     @Query("DELETE FROM sessions WHERE projectId = :projectId") suspend fun deleteByProject(projectId: Long)
     @Query("DELETE FROM sessions WHERE nodeId = :nodeId") suspend fun deleteByNode(nodeId: Long)
 }

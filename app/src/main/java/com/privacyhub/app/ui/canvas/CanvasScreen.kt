@@ -14,6 +14,8 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.ZoomIn
+import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +39,7 @@ import com.privacyhub.app.ui.repository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CanvasScreen(projectId: Long, onBack: () -> Unit) {
+fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity) -> Unit) {
     val repo = repository()
     val vm: CanvasViewModel = viewModel(factory = viewModelFactory { initializer { CanvasViewModel(repo, projectId) } })
     val project by vm.project.collectAsStateWithLifecycle()
@@ -58,6 +60,8 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit) {
             }
             Row(Modifier.padding(horizontal = 4.dp)) {
                 IconButton(onClick = { vm.addBranch() }) { Icon(Icons.Rounded.Add, contentDescription = "Add branch") }
+                IconButton(onClick = { vm.zoomIn() }) { Icon(Icons.Rounded.ZoomIn, contentDescription = "Zoom in") }
+                IconButton(onClick = { vm.zoomOut() }) { Icon(Icons.Rounded.ZoomOut, contentDescription = "Zoom out") }
                 IconButton(onClick = { vm.autoArrange() }) { Icon(Icons.Rounded.AutoFixHigh, contentDescription = "Auto arrange") }
                 IconButton(onClick = { vm.requestFit() }) { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = "Fit to screen") }
                 IconButton(onClick = { vm.undo() }, enabled = vm.undoCount > 0) { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "Undo") }
@@ -65,7 +69,7 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit) {
             }
         }
         if (selected != null) {
-            NodePanel(vm, selected, onEdit = { editing = selected }, modifier = Modifier.align(Alignment.BottomCenter))
+            NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) }, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
 
