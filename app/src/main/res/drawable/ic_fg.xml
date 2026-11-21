@@ -2,6 +2,19 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M34,28 L54,52 L74,28 L86,28 L54,68 L22,28 Z" />
+    <!-- links from the focus timer to three mind-map nodes -->
+    <path android:pathData="M48,41 L36,28 M69,54 L84,54 M54,69 L54,84"
+        android:strokeColor="#8BD3F5" android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <!-- satellite nodes -->
+    <path android:pathData="M36,23 A5,5 0 1,1 35.9,23 Z M89,54 A5,5 0 1,1 88.9,54 Z M54,89 A5,5 0 1,1 53.9,89 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- timer ring -->
+    <path android:pathData="M54,31 A23,23 0 1,1 53.9,31 Z"
+        android:strokeColor="#FFFFFF" android:strokeWidth="5"
+        android:fillColor="@android:color/transparent" />
+    <!-- timer hands -->
+    <path android:pathData="M54,54 L54,40 M54,54 L63,58"
+        android:strokeColor="#FFB74D" android:strokeWidth="4"
+        android:strokeLineCap="round" />
 </vector>

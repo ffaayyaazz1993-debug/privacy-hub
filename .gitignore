@@ -10,5 +10,6 @@
 /app/build/
 /app/release/
 *.apk
+.kotlin/
 *.aab
 *.log
