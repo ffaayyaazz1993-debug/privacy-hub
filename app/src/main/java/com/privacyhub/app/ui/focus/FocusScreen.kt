@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -84,6 +88,7 @@ import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
+import com.privacyhub.app.ui.animation.IosMotion
 import com.privacyhub.app.ui.repository
 import com.privacyhub.app.util.formatClock
 import kotlinx.coroutines.delay
@@ -182,18 +187,10 @@ fun FocusScreen(onGoMaps: () -> Unit) {
         Spacer(Modifier.height(20.dp))
 
         when {
-            s == null -> Button(onClick = { if (suggested != null) vm.startSuggested() else onGoMaps() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = null); Spacer(Modifier.size(8.dp)); Text("Start Focus")
-            }
-            s.status == SessionStatus.RUNNING -> Button(onClick = { vm.pause() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.Pause, contentDescription = null); Spacer(Modifier.size(8.dp)); Text("Pause")
-            }
-            s.status == SessionStatus.PAUSED -> Button(onClick = { vm.resume() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = null); Spacer(Modifier.size(8.dp)); Text("Resume")
-            }
-            else -> Button(onClick = { if (suggested != null) vm.startSuggested() else onGoMaps() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = null); Spacer(Modifier.size(8.dp)); Text("Start Focus")
-            }
+            s == null -> IosActionButton("Start Focus", Icons.Rounded.PlayArrow) { if (suggested != null) vm.startSuggested() else onGoMaps() }
+            s.status == SessionStatus.RUNNING -> IosActionButton("Pause", Icons.Rounded.Pause) { vm.pause() }
+            s.status == SessionStatus.PAUSED -> IosActionButton("Resume", Icons.Rounded.PlayArrow) { vm.resume() }
+            else -> IosActionButton("Start Focus", Icons.Rounded.PlayArrow) { if (suggested != null) vm.startSuggested() else onGoMaps() }
         }
 
         if (s != null) {
@@ -239,9 +236,24 @@ fun FocusScreen(onGoMaps: () -> Unit) {
 }
 
 @Composable
+private fun IosActionButton(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, IosMotion.pressSpring, label = "pressScale")
+    Button(onClick = onClick, interactionSource = source,
+        modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }) {
+        Icon(icon, contentDescription = null); Spacer(Modifier.size(8.dp)); Text(label)
+    }
+}
+
+@Composable
 private fun ModeControl(icon: ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.92f else 1f, IosMotion.pressSpring, label = "modePress")
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(4.dp)) {
-        IconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
+        IconButton(onClick = onClick, interactionSource = source,
+            modifier = Modifier.size(44.dp).graphicsLayer { scaleX = scale; scaleY = scale }) {
             Icon(icon, contentDescription = label, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(label, style = MaterialTheme.typography.labelSmall,

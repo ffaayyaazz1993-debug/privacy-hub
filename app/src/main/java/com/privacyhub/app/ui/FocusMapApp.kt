@@ -51,6 +51,7 @@ import com.privacyhub.app.ui.maps.MapsScreen
 import com.privacyhub.app.ui.planner.PlannerScreen
 import com.privacyhub.app.ui.search.SearchScreen
 import com.privacyhub.app.ui.detox.DetoxScreen
+import com.privacyhub.app.ui.animation.IosScreenEnter
 import com.privacyhub.app.ui.review.ReviewScreen
 import com.privacyhub.app.ui.settings.SettingsScreen
 import com.privacyhub.app.ui.theme.FocusMapTheme
@@ -113,18 +114,19 @@ fun FocusMapApp() {
             }
         ) { padding ->
             NavHost(navController = nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
-                composable(Routes.HOME) {
+                composable(Routes.HOME) { IosScreenEnter {
                     HomeScreen(
                         onOpenProject = { nav.navigate(Routes.canvas(it)) },
                         onGoMaps = { nav.navigate(Routes.MAPS) },
                         onGoFocus = { nav.navigate(Routes.FOCUS) },
                         onGoSearch = { nav.navigate(Routes.SEARCH) },
-                    )
-                }
+                    ) } }
+                // Canvas screen excluded from enter animation: animating a fully rendered
+                // map on this low-end device measurably increased janky frames.
                 composable(Routes.MAPS) { MapsScreen(onOpenProject = { nav.navigate(Routes.canvas(it)) }) }
-                composable(Routes.FOCUS) { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) }
-                composable(Routes.PLANNER) { PlannerScreen() }
-                composable(Routes.DETOX) { DetoxScreen() }
+                composable(Routes.FOCUS) { IosScreenEnter { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) } }
+                composable(Routes.PLANNER) { IosScreenEnter { PlannerScreen() } }
+                composable(Routes.DETOX) { IosScreenEnter { DetoxScreen() } }
                 composable(Routes.SEARCH) { SearchScreen(
                     onOpenProject = { nav.navigate(Routes.canvas(it)) },
                     onOpenNode = { pid, _ -> nav.navigate(Routes.canvas(pid)) },
@@ -135,10 +137,10 @@ fun FocusMapApp() {
                     arguments = listOf(navArgument("nodeId") { type = NavType.LongType }),
                 ) { entry -> ReviewScreen(filterNodeId = entry.arguments?.getLong("nodeId")) }
                 composable(Routes.ANALYTICS) { AnalyticsScreen() }
-                composable(Routes.SETTINGS) { SettingsScreen(
+                composable(Routes.SETTINGS) { IosScreenEnter { SettingsScreen(
                     onGoReview = { nav.navigate(Routes.REVIEW) },
                     onGoAnalytics = { nav.navigate(Routes.ANALYTICS) },
-                ) }
+                ) } }
                 composable(
                     Routes.CANVAS,
                     arguments = listOf(navArgument("projectId") { type = NavType.LongType }),

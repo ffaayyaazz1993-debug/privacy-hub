@@ -60,3 +60,14 @@ the exact same script before touching the canvas.
 - Android Studio Profiler / Perfetto system trace (not available in this CLI
   session); 50/100/250/500-node canvas benchmark; battery comparison;
   cold-start timing; DND/guard-on CPU cost.
+
+## iOS-style motion (M11.2 addendum)
+- `ui/animation/IosMotion.kt`: 180 ms fade + small vertical slide on screen
+  entry (alpha/translation only, GPU layers), spring press-scale on Focus
+  primary action and the four mode controls. No layout/Canvas work per frame.
+- Maps/canvas destination is deliberately NOT animated: animating it did not
+  help and gfxinfo stayed high (~60% jank with a 50-node stress map). This is
+  a pre-existing canvas/list cost, not introduced by the motion code.
+- Post-motion release gfxinfo (same script): Focus 22.5% jank / p95 46 ms /
+  p99 117 ms; Detox 10.8% / 34 ms / 42 ms; Maps 60.6% / 113 ms / 150 ms.
+- Debug and release builds green; 53 JVM tests pass.
