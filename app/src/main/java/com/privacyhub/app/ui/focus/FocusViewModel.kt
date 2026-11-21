@@ -8,9 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.privacyhub.app.FocusMapApplication
 import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
+import com.privacyhub.app.data.db.UserSettingsEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
 import com.privacyhub.app.domain.model.NodeStatus
+import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.domain.pomodoro.FocusSessionManager
 import com.privacyhub.app.domain.pomodoro.Pomodoro
@@ -32,6 +34,11 @@ import kotlinx.coroutines.launch
 class FocusViewModel(private val repo: FocusMapRepository) : ViewModel() {
     private val app get() = FocusMapApplication.instance
     private val manager = FocusSessionManager(repo)
+
+    val settings: StateFlow<UserSettingsEntity> = repo.observeSettings()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity())
+    val suggestedNode: StateFlow<NodeEntity?> = repo.nodes.observeRecent()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val active: StateFlow<FocusSessionEntity?> = repo.sessions.observeActive()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -80,6 +87,18 @@ class FocusViewModel(private val repo: FocusMapRepository) : ViewModel() {
             reviewDismissedId = sessionId
         }
     }
+
+    fun startSuggested() {
+        val n = suggestedNode.value ?: return
+        startFocus(n.projectId, n.id)
+    }
+    fun toggleNodeDone(node: NodeEntity) {
+        viewModelScope.launch {
+            val next = if (node.status == NodeStatus.COMPLETED) NodeStatus.IN_PROGRESS else NodeStatus.COMPLETED
+            repo.nodes.update(node.copy(status = next, updatedAt = System.currentTimeMillis()))
+        }
+    }
+    fun hasActiveSession(): Boolean = active.value?.status.let { it == SessionStatus.RUNNING || it == SessionStatus.PAUSED }
 
     fun updateNotes(text: String) {
         val s = active.value ?: return

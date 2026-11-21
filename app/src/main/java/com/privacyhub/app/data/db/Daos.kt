@@ -37,6 +37,7 @@ interface NodeDao {
     @Query("SELECT * FROM nodes") fun observeAll(): Flow<List<NodeEntity>>
     @Query("SELECT * FROM nodes WHERE projectId = :projectId") suspend fun getByProject(projectId: Long): List<NodeEntity>
     @Query("SELECT * FROM nodes WHERE parentId = :parentId") suspend fun childrenOf(parentId: Long): List<NodeEntity>
+    @Query("SELECT * FROM nodes ORDER BY updatedAt DESC LIMIT 1") fun observeRecent(): Flow<NodeEntity?>
     @Query("SELECT COUNT(*) FROM nodes WHERE projectId = :projectId") fun countByProject(projectId: Long): Flow<Int>
     @Query("SELECT COUNT(*) FROM nodes WHERE projectId = :projectId AND status = :status")
     fun countByProjectAndStatus(projectId: Long, status: String): Flow<Int>

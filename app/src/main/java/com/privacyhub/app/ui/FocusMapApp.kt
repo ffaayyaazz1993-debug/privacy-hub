@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,7 +97,7 @@ fun FocusMapApp() {
                                 }
                             },
                             icon = { Icon(t.icon, contentDescription = t.label) },
-                            label = { Text(t.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(t.label, maxLines = 1, fontSize = 9.sp, style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
