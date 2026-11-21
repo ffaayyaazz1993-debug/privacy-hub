@@ -208,3 +208,17 @@ interface DetoxDao {
     @Query("SELECT * FROM detox_activations ORDER BY startedAt DESC") fun observeHistory(): Flow<List<DetoxActivationEntity>>
     @Query("SELECT COUNT(*) FROM detox_activations WHERE sourceType = 'POMODORO' AND status = 'RELEASED'") fun releasedCount(): Flow<Int>
 }
+
+@Dao
+interface ProjectTemplateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(t: ProjectTemplateEntity)
+    @Query("SELECT * FROM project_templates WHERE projectId = :projectId")
+    suspend fun get(projectId: Long): ProjectTemplateEntity?
+    @Query("SELECT * FROM project_templates WHERE projectId = :projectId")
+    fun observe(projectId: Long): Flow<ProjectTemplateEntity?>
+    @Query("DELETE FROM project_templates WHERE projectId = :projectId")
+    suspend fun delete(projectId: Long)
+    @Query("SELECT * FROM project_templates")
+    suspend fun getAll(): List<ProjectTemplateEntity>
+}

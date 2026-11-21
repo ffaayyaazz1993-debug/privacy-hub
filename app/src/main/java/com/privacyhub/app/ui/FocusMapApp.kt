@@ -53,6 +53,7 @@ import com.privacyhub.app.ui.search.SearchScreen
 import com.privacyhub.app.ui.detox.DetoxScreen
 import com.privacyhub.app.ui.animation.IosScreenEnter
 import com.privacyhub.app.ui.review.ReviewScreen
+import com.privacyhub.app.ui.template.TemplateDashboardScreen
 import com.privacyhub.app.ui.settings.SettingsScreen
 import com.privacyhub.app.ui.theme.FocusMapTheme
 
@@ -148,7 +149,8 @@ fun FocusMapApp() {
                     val pid = entry.arguments?.getLong("projectId") ?: 0L
                     CanvasScreen(projectId = pid, onBack = { nav.popBackStack() }, onStartFocus = { node -> startFocus(node) },
                         onRecall = { node -> nav.navigate(Routes.reviewNode(node.id)) },
-                        onReviewNode = { node -> nav.navigate(Routes.reviewNode(node.id)) })
+                        onReviewNode = { node -> nav.navigate(Routes.reviewNode(node.id)) },
+                        onOpenDashboard = { nav.navigate(Routes.projectDashboard(pid)) })
                 }
             }
         }

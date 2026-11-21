@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,7 +45,7 @@ import com.privacyhub.app.ui.detox.NodeDetoxDialog
 @Composable
 fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity) -> Unit,
                   onRecall: (NodeEntity) -> Unit, onReviewNode: (NodeEntity) -> Unit,
-                  onDetoxNode: (NodeEntity) -> Unit = {}) {
+                  onDetoxNode: (NodeEntity) -> Unit = {}, onOpenDashboard: () -> Unit = {}) {
     val repo = repository()
     val vm: CanvasViewModel = viewModel(factory = viewModelFactory { initializer { CanvasViewModel(repo, projectId) } })
     val project by vm.project.collectAsStateWithLifecycle()
@@ -73,6 +74,7 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
                 IconButton(onClick = { vm.zoomOut() }) { Icon(Icons.Rounded.ZoomOut, contentDescription = "Zoom out") }
                 IconButton(onClick = { vm.autoArrange() }) { Icon(Icons.Rounded.AutoFixHigh, contentDescription = "Auto arrange") }
                 IconButton(onClick = { vm.requestFit() }) { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = "Fit to screen") }
+                IconButton(onClick = onOpenDashboard) { Icon(Icons.Rounded.Dashboard, contentDescription = "Workspace dashboard") }
                 IconButton(onClick = { showStats = true }) { Icon(Icons.Rounded.Info, contentDescription = "Project statistics") }
                 IconButton(onClick = { vm.undo() }, enabled = vm.undoCount > 0) { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "Undo") }
                 IconButton(onClick = { vm.redo() }, enabled = vm.redoCount > 0) { Icon(Icons.AutoMirrored.Rounded.Redo, contentDescription = "Redo") }

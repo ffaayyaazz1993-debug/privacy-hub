@@ -12,6 +12,8 @@ object Routes {
     const val REVIEW = "review"
     const val REVIEW_NODE = "review/node/{nodeId}"
     fun reviewNode(nodeId: Long) = "review/node/$nodeId"
+    const val PROJECT_DASHBOARD = "dashboard/{projectId}"
+    fun projectDashboard(projectId: Long) = "dashboard/$projectId"
     const val CANVAS = "canvas/{projectId}"
     fun canvas(projectId: Long) = "canvas/$projectId"
 }

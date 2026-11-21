@@ -12,6 +12,7 @@ import com.privacyhub.app.data.db.DetoxProfileEntity
 import com.privacyhub.app.data.db.DetoxScheduleEntity
 import com.privacyhub.app.data.db.NodeDetoxEntity
 import com.privacyhub.app.data.db.PlannedSessionEntity
+import com.privacyhub.app.data.db.ProjectTemplateEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.db.ReferenceEntity
 import com.privacyhub.app.data.db.RoutineEntity
@@ -23,7 +24,7 @@ import kotlinx.coroutines.flow.first
 /** Open-JSON export/import so users are never locked in. Import merges (remaps ids). */
 class BackupManager(private val repo: FocusMapRepository) {
     data class Backup(
-        val version: Int = 4,
+        val version: Int = 5,
         val exportedAt: Long = System.currentTimeMillis(),
         val projects: List<ProjectEntity> = emptyList(),
         val nodes: List<NodeEntity> = emptyList(),
@@ -41,6 +42,7 @@ class BackupManager(private val repo: FocusMapRepository) {
         val detoxSchedules: List<DetoxScheduleEntity> = emptyList(),
         val detoxActivations: List<DetoxActivationEntity> = emptyList(),
         val nodeDetox: List<NodeDetoxEntity> = emptyList(),
+        val projectTemplates: List<ProjectTemplateEntity> = emptyList(),
     )
 
     companion object {
@@ -85,12 +87,13 @@ class BackupManager(private val repo: FocusMapRepository) {
         detoxSchedules = repo.detox.observeSchedules().first(),
         detoxActivations = repo.detox.observeHistory().first(),
         nodeDetox = repo.detox.observeNodeConfigs(),
+        projectTemplates = repo.projectTemplates.getAll(),
     ))
 
     /** Returns the number of projects imported. Existing data is preserved. */
     suspend fun importJson(json: String): Int {
         val backup = deserialize(json) ?: throw IllegalArgumentException("Invalid or unsupported FocusMap backup file")
-        if (backup.version > 4) throw IllegalArgumentException("Backup version ${backup.version} is newer than supported (4)")
+        if (backup.version > 5) throw IllegalArgumentException("Backup version ${backup.version} is newer than supported (5)")
         val projectsIn = backup.projects.orEmpty()
         val nodesIn = backup.nodes.orEmpty()
         val sessionsIn = backup.sessions.orEmpty()
@@ -104,6 +107,7 @@ class BackupManager(private val repo: FocusMapRepository) {
         val dSchedulesIn = backup.detoxSchedules.orEmpty()
         val dActivationsIn = backup.detoxActivations.orEmpty()
         val nodeDetoxIn = backup.nodeDetox.orEmpty()
+        val templatesIn = backup.projectTemplates.orEmpty()
         var count = 0
         for (p in projectsIn) {
             val now = System.currentTimeMillis()
@@ -164,6 +168,9 @@ class BackupManager(private val repo: FocusMapRepository) {
             }
             for (act in dActivationsIn.filter { profileMap.containsKey(it.profileId) }) {
                 repo.detox.insertActivation(act.copy(id = 0, profileId = profileMap[act.profileId]!!))
+            }
+            templatesIn.firstOrNull { it.projectId == p.id }?.let {
+                repo.projectTemplates.upsert(it.copy(projectId = newPid))
             }
             count++
         }

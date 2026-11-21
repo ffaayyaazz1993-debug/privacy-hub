@@ -3,7 +3,10 @@ package com.privacyhub.app.ui.maps
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privacyhub.app.data.db.ProjectEntity
+import com.privacyhub.app.data.db.ProjectTemplateEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
+import com.privacyhub.app.domain.template.WorkspaceTemplate
+import com.privacyhub.app.domain.template.WorkspaceTemplates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +23,19 @@ class MapsViewModel(private val repo: FocusMapRepository) : ViewModel() {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setQuery(q: String) { query.value = q }
+    fun createFromTemplate(title: String, template: WorkspaceTemplate, category: String,
+                           onCreated: (Long) -> Unit) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            val id = WorkspaceTemplates.createProject(repo, template, title, category)
+            repo.saveProjectTemplate(ProjectTemplateEntity(
+                projectId = id, templateId = template.id, templateVersion = template.version,
+                pomodoroPresets = template.presets.joinToString(";") { "${it.label}|${it.minutes}" },
+                detoxSuggestion = template.detox?.name.orEmpty()))
+            onCreated(id)
+        }
+    }
+
     fun create(title: String, category: String) {
         if (title.isBlank()) return
         viewModelScope.launch { repo.createProject(title.trim(), category = category.trim()) }

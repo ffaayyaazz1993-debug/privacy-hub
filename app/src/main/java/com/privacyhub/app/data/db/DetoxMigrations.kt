@@ -64,3 +64,22 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_detox_activations_status` ON `detox_activations` (`status`)")
     }
 }
+
+/** v4 → v5: template metadata + task attributes on nodes. Additive only. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `nodes` ADD COLUMN `startDate` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `nodes` ADD COLUMN `dueDate` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `nodes` ADD COLUMN `taskStatus` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `nodes` ADD COLUMN `dependencies` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `project_templates` (
+            `projectId` INTEGER PRIMARY KEY NOT NULL,
+            `templateId` TEXT NOT NULL,
+            `templateVersion` INTEGER NOT NULL,
+            `pomodoroPresets` TEXT NOT NULL,
+            `detoxSuggestion` TEXT NOT NULL,
+            `createdAt` INTEGER NOT NULL,
+            FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON DELETE CASCADE
+        )""")
+    }
+}

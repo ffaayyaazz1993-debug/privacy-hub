@@ -41,6 +41,10 @@ data class NodeEntity(
     val totalFocusSeconds: Long = 0,
     val status: NodeStatus = NodeStatus.NOT_STARTED,
     val priority: Int = 0,
+    val startDate: Long = 0L,
+    val dueDate: Long = 0L,
+    val taskStatus: String = "",
+    val dependencies: String = "",
     val collapsed: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
@@ -302,4 +306,19 @@ data class DetoxActivationEntity(
     val overrideUntil: Long = 0L,
     val status: String = "ACTIVE",
     val focusSessionId: Long? = null,
+)
+
+/** Template provenance and suggested settings; never overwrites the project itself. */
+@Entity(
+    tableName = "project_templates",
+    foreignKeys = [ForeignKey(entity = ProjectEntity::class, parentColumns = ["id"], childColumns = ["projectId"],
+        onDelete = ForeignKey.CASCADE)],
+)
+data class ProjectTemplateEntity(
+    @PrimaryKey val projectId: Long,
+    val templateId: String,
+    val templateVersion: Int,
+    val pomodoroPresets: String = "",
+    val detoxSuggestion: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
 )

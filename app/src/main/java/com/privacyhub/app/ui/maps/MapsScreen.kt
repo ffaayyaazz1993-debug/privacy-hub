@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.privacyhub.app.ui.repository
+import com.privacyhub.app.ui.template.TemplatePickerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,16 +93,10 @@ fun MapsScreen(onOpenProject: (Long) -> Unit) {
     }
 
     if (showCreate) {
-        var title by remember { mutableStateOf("") }
-        var category by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { showCreate = false }, title = { Text("New mind map") },
-            text = { Column {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title (e.g. Learn Macroeconomics)") }, singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category (optional)") }, singleLine = true)
-            } },
-            confirmButton = { TextButton(onClick = { vm.create(title, category); showCreate = false }, enabled = title.isNotBlank()) { Text("Create") } },
-            dismissButton = { TextButton(onClick = { showCreate = false }) { Text("Cancel") } })
+        TemplatePickerDialog(onDismiss = { showCreate = false },
+            onCreate = { template, title, category ->
+                vm.createFromTemplate(title, template, category, onOpenProject)
+            })
     }
 
     renameTarget?.let { id ->

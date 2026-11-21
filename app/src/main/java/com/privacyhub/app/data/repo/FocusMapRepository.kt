@@ -7,6 +7,7 @@ import com.privacyhub.app.data.db.DetoxProfileEntity
 import com.privacyhub.app.data.db.DetoxScheduleEntity
 import com.privacyhub.app.data.db.FocusMapDatabase
 import com.privacyhub.app.data.db.NodeDetoxEntity
+import com.privacyhub.app.data.db.ProjectTemplateEntity
 import com.privacyhub.app.domain.detox.DetoxCoordinator
 import com.privacyhub.app.domain.detox.DetoxSource
 import com.privacyhub.app.domain.export.ExportProject
@@ -46,6 +47,7 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
     val planned = db.plannedSessionDao()
     val reflections = db.weeklyReflectionDao()
     val detox = db.detoxDao()
+    val projectTemplates = db.projectTemplateDao()
 
     fun observeSchedulerSettings(): Flow<SchedulerSettingsEntity> =
         schedulerSettings.observe().map { it ?: SchedulerSettingsEntity() }
@@ -243,6 +245,11 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
         add(root.id, source.nodes)
         return pid
     }
+
+    // ---- Workspace templates ----
+    suspend fun saveProjectTemplate(t: ProjectTemplateEntity) = projectTemplates.upsert(t)
+    suspend fun projectTemplate(projectId: Long): ProjectTemplateEntity? = projectTemplates.get(projectId)
+    fun observeProjectTemplate(projectId: Long) = projectTemplates.observe(projectId)
 
     // ---- Digital Detox ----
     fun observeProfiles() = detox.observeProfiles()
