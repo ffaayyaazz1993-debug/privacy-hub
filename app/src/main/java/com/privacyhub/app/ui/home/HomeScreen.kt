@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CardDefaults
@@ -36,7 +38,7 @@ import com.privacyhub.app.util.formatDuration
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenProject: (Long) -> Unit, onGoMaps: () -> Unit, onGoFocus: () -> Unit) {
+fun HomeScreen(onOpenProject: (Long) -> Unit, onGoMaps: () -> Unit, onGoFocus: () -> Unit, onGoSearch: () -> Unit) {
     val repo = repository()
     val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(repo) } })
     val recent by vm.recentProjects.collectAsStateWithLifecycle()
@@ -50,7 +52,11 @@ fun HomeScreen(onOpenProject: (Long) -> Unit, onGoMaps: () -> Unit, onGoFocus: (
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
     ) {
         item {
-            Text("FocusMap", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("FocusMap", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f))
+                IconButton(onClick = onGoSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search") }
+            }
             Text("Think → Organise → Focus → Execute → Measure → Review",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

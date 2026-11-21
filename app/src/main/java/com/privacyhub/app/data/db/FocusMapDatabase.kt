@@ -71,10 +71,70 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         }
     }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `references` (
+            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            `projectId` INTEGER NOT NULL,
+            `nodeId` INTEGER NOT NULL,
+            `title` TEXT NOT NULL,
+            `content` TEXT NOT NULL,
+            `url` TEXT NOT NULL,
+            `mimeType` TEXT NOT NULL,
+            `uriString` TEXT NOT NULL,
+            `createdAt` INTEGER NOT NULL,
+            FOREIGN KEY(`nodeId`) REFERENCES `nodes`(`id`) ON DELETE CASCADE,
+            FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON DELETE CASCADE
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_references_nodeId` ON `references` (`nodeId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_references_projectId` ON `references` (`projectId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_references_title` ON `references` (`title`)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `routines` (
+            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            `title` TEXT NOT NULL,
+            `projectId` INTEGER NOT NULL,
+            `nodeId` INTEGER,
+            `weekdays` TEXT NOT NULL,
+            `durationMinutes` INTEGER NOT NULL,
+            `weeklyTarget` INTEGER NOT NULL,
+            `reminderMinutes` INTEGER NOT NULL,
+            `active` INTEGER NOT NULL,
+            `createdAt` INTEGER NOT NULL,
+            FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON DELETE CASCADE
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_routines_projectId` ON `routines` (`projectId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_routines_active` ON `routines` (`active`)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `planned_sessions` (
+            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            `routineId` INTEGER NOT NULL,
+            `projectId` INTEGER NOT NULL,
+            `nodeId` INTEGER NOT NULL,
+            `scheduledAt` INTEGER NOT NULL,
+            `durationMinutes` INTEGER NOT NULL,
+            `status` TEXT NOT NULL,
+            `focusSessionId` INTEGER,
+            FOREIGN KEY(`routineId`) REFERENCES `routines`(`id`) ON DELETE CASCADE,
+            FOREIGN KEY(`nodeId`) REFERENCES `nodes`(`id`) ON DELETE CASCADE
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_planned_sessions_routineId` ON `planned_sessions` (`routineId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_planned_sessions_scheduledAt` ON `planned_sessions` (`scheduledAt`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_planned_sessions_status` ON `planned_sessions` (`status`)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `weekly_reflections` (
+            `weekStart` INTEGER PRIMARY KEY NOT NULL,
+            `accomplished` TEXT NOT NULL,
+            `incomplete` TEXT NOT NULL,
+            `concepts` TEXT NOT NULL,
+            `priority` TEXT NOT NULL,
+            `updatedAt` INTEGER NOT NULL
+        )""")
+    }
+}
+
 @Database(
     entities = [ProjectEntity::class, NodeEntity::class, FocusSessionEntity::class, UserSettingsEntity::class,
-    FlashcardEntity::class, ReviewLogEntity::class, SchedulerSettingsEntity::class],
-    version = 2,
+    FlashcardEntity::class, ReviewLogEntity::class, SchedulerSettingsEntity::class,
+    ReferenceEntity::class, RoutineEntity::class, PlannedSessionEntity::class, WeeklyReflectionEntity::class],
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -86,6 +146,10 @@ abstract class FocusMapDatabase : RoomDatabase() {
     abstract fun flashcardDao(): FlashcardDao
     abstract fun reviewLogDao(): ReviewLogDao
     abstract fun schedulerSettingsDao(): SchedulerSettingsDao2
+    abstract fun referenceDao(): ReferenceDao
+    abstract fun routineDao(): RoutineDao
+    abstract fun plannedSessionDao(): PlannedSessionDao
+    abstract fun weeklyReflectionDao(): WeeklyReflectionDao
 
 
     companion object {
@@ -93,7 +157,7 @@ abstract class FocusMapDatabase : RoomDatabase() {
         fun get(context: Context): FocusMapDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, FocusMapDatabase::class.java, "focusmap.db"
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }

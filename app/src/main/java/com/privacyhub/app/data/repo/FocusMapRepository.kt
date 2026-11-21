@@ -2,6 +2,12 @@ package com.privacyhub.app.data.repo
 
 import androidx.room.withTransaction
 import com.privacyhub.app.data.db.FocusMapDatabase
+import com.privacyhub.app.domain.export.ExportProject
+import com.privacyhub.app.domain.export.OutlineNode
+import com.privacyhub.app.data.db.PlannedSessionEntity
+import com.privacyhub.app.data.db.ReferenceEntity
+import com.privacyhub.app.data.db.RoutineEntity
+import com.privacyhub.app.data.db.WeeklyReflectionEntity
 import com.privacyhub.app.data.db.FlashcardEntity
 import com.privacyhub.app.data.db.ReviewLogEntity
 import com.privacyhub.app.data.db.SchedulerSettingsEntity
@@ -15,6 +21,7 @@ import com.privacyhub.app.domain.spaced.LearnState
 import com.privacyhub.app.domain.spaced.RecallRating
 import com.privacyhub.app.domain.spaced.ReviewScheduler
 import kotlinx.coroutines.flow.Flow
+import java.util.Calendar
 import kotlinx.coroutines.flow.map
 
 /** Single facade over the DAOs; ViewModels depend only on this. */
@@ -26,6 +33,10 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
     val cards = db.flashcardDao()
     val reviewLogs = db.reviewLogDao()
     val schedulerSettings = db.schedulerSettingsDao()
+    val references = db.referenceDao()
+    val routines = db.routineDao()
+    val planned = db.plannedSessionDao()
+    val reflections = db.weeklyReflectionDao()
 
     fun observeSchedulerSettings(): Flow<SchedulerSettingsEntity> =
         schedulerSettings.observe().map { it ?: SchedulerSettingsEntity() }
@@ -146,4 +157,83 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
         nodes.updateStats(node.id, completed, seconds, status.name, now)
         projects.get(session.projectId)?.let { projects.update(it.copy(updatedAt = now)) }
     }
+
+
+    suspend fun createReference(projectId: Long, nodeId: Long, title: String, content: String,
+                                url: String, mimeType: String, uriString: String): Long =
+        references.insert(ReferenceEntity(projectId = projectId, nodeId = nodeId,
+            title = title.ifBlank { url.ifBlank { "Captured note" } }, content = content,
+            url = url, mimeType = mimeType, uriString = uriString))
+
+    suspend fun saveRoutine(r: RoutineEntity): Long = if (r.id == 0L) routines.insert(r) else { routines.update(r); r.id }
+
+    suspend fun deleteRoutine(id: Long) {
+        routines.get(id)?.let { r ->
+            planned.deleteByRoutine(r.id)
+            routines.delete(r)
+        }
+    }
+
+    /** Monday-first weekday index for a epoch-millis timestamp. */
+    fun weekdayIndex(at: Long): Int {
+        val c = Calendar.getInstance().apply { timeInMillis = at }
+        return (c.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    }
+
+    fun weekStart(at: Long): Long {
+        val c = Calendar.getInstance().apply {
+            timeInMillis = at
+            set(Calendar.HOUR_OF_DAY, 0); clear(Calendar.MINUTE); clear(Calendar.SECOND); clear(Calendar.MILLISECOND)
+        }
+        val idx = (c.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        c.add(Calendar.DAY_OF_YEAR, -idx)
+        return c.timeInMillis
+    }
+
+    /** Generates future activities; existing (routine, slot) pairs are never duplicated. */
+    suspend fun generatePlanned(routine: RoutineEntity, now: Long, weeks: Int = 2): Int {
+        if (!routine.active || routine.nodeId == null) return 0
+        val days = routine.weekdays.split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 0..6 }.toSet()
+        if (days.isEmpty()) return 0
+        var added = 0
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 9); clear(Calendar.MINUTE); clear(Calendar.SECOND); clear(Calendar.MILLISECOND)
+        }
+        for (offset in 0 until weeks * 7) {
+            val at = (cal.timeInMillis) + offset * 86_400_000L
+            if (weekdayIndex(at) !in days || at <= now) continue
+            if (planned.find(routine.id, at) != null) continue
+            planned.insert(PlannedSessionEntity(routineId = routine.id, projectId = routine.projectId,
+                nodeId = routine.nodeId, scheduledAt = at, durationMinutes = routine.durationMinutes))
+            added++
+        }
+        return added
+    }
+
+    suspend fun markMissed(now: Long) = planned.markMissed(now)
+
+    suspend fun reschedulePlanned(id: Long, newAt: Long) {
+        val p = planned.get(id) ?: return
+        if (p.status != "COMPLETED") planned.update(p.copy(scheduledAt = newAt, status = "RESCHEDULED"))
+    }
+
+    /** OPML import creates a real project tree; only titles/descriptions survive the format. */
+    suspend fun importOpmlProject(source: ExportProject): Long {
+        val pid = createProject(source.title, source.description)
+        val root = nodes.getByProject(pid).firstOrNull() ?: return pid
+        suspend fun add(parentId: Long, children: List<OutlineNode>) {
+            children.forEach { c ->
+                val now = System.currentTimeMillis()
+                val id = nodes.insert(com.privacyhub.app.data.db.NodeEntity(
+                    projectId = pid, parentId = parentId, title = c.title,
+                    description = c.description, createdAt = now, updatedAt = now))
+                add(id, c.children)
+            }
+        }
+        add(root.id, source.nodes)
+        return pid
+    }
+
+    suspend fun saveReflection(r: WeeklyReflectionEntity) = reflections.upsert(r.copy(updatedAt = System.currentTimeMillis()))
 }

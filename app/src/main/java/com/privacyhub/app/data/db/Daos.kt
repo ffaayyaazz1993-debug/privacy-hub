@@ -35,6 +35,7 @@ interface NodeDao {
     @Query("SELECT * FROM nodes WHERE id = :id") suspend fun get(id: Long): NodeEntity?
     @Query("SELECT * FROM nodes WHERE projectId = :projectId") fun observeByProject(projectId: Long): Flow<List<NodeEntity>>
     @Query("SELECT * FROM nodes") fun observeAll(): Flow<List<NodeEntity>>
+    @Query("SELECT * FROM nodes WHERE title LIKE '%' || :q || '%' OR description LIKE '%' || :q || '%' OR notes LIKE '%' || :q || '%'") fun search(q: String): Flow<List<NodeEntity>>
     @Query("SELECT * FROM nodes WHERE projectId = :projectId") suspend fun getByProject(projectId: Long): List<NodeEntity>
     @Query("SELECT * FROM nodes WHERE parentId = :parentId") suspend fun childrenOf(parentId: Long): List<NodeEntity>
     @Query("SELECT * FROM nodes ORDER BY updatedAt DESC LIMIT 1") fun observeRecent(): Flow<NodeEntity?>
@@ -128,4 +129,42 @@ interface SchedulerSettingsDao2 {
     @Query("SELECT * FROM scheduler_settings WHERE id = 1") fun observe(): Flow<SchedulerSettingsEntity?>
     @Query("SELECT * FROM scheduler_settings WHERE id = 1") suspend fun get(): SchedulerSettingsEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(s: SchedulerSettingsEntity)
+}
+
+@Dao
+interface ReferenceDao {
+    @Insert suspend fun insert(r: ReferenceEntity): Long
+    @Delete suspend fun delete(r: ReferenceEntity)
+    @Query("SELECT * FROM `references` ORDER BY createdAt DESC") fun observeAll(): Flow<List<ReferenceEntity>>
+    @Query("SELECT * FROM `references` WHERE nodeId = :nodeId ORDER BY createdAt DESC") fun observeByNode(nodeId: Long): Flow<List<ReferenceEntity>>
+    @Query("SELECT * FROM `references` WHERE projectId = :projectId ORDER BY createdAt DESC") fun observeByProject(projectId: Long): Flow<List<ReferenceEntity>>
+    @Query("SELECT * FROM `references` WHERE title LIKE '%' || :q || '%' OR content LIKE '%' || :q || '%' OR url LIKE '%' || :q || '%' ORDER BY createdAt DESC") fun search(q: String): Flow<List<ReferenceEntity>>
+}
+
+@Dao
+interface RoutineDao {
+    @Insert suspend fun insert(r: RoutineEntity): Long
+    @Update suspend fun update(r: RoutineEntity)
+    @Delete suspend fun delete(r: RoutineEntity)
+    @Query("SELECT * FROM routines ORDER BY createdAt DESC") fun observeAll(): Flow<List<RoutineEntity>>
+    @Query("SELECT * FROM routines WHERE id = :id") suspend fun get(id: Long): RoutineEntity?
+}
+
+@Dao
+interface PlannedSessionDao {
+    @Insert suspend fun insert(p: PlannedSessionEntity): Long
+    @Update suspend fun update(p: PlannedSessionEntity)
+    @Query("SELECT * FROM planned_sessions ORDER BY scheduledAt ASC") fun observeAll(): Flow<List<PlannedSessionEntity>>
+    @Query("SELECT * FROM planned_sessions WHERE scheduledAt BETWEEN :from AND :to ORDER BY scheduledAt ASC") fun observeBetween(from: Long, to: Long): Flow<List<PlannedSessionEntity>>
+    @Query("SELECT * FROM planned_sessions WHERE routineId = :routineId AND scheduledAt = :at") suspend fun find(routineId: Long, at: Long): PlannedSessionEntity?
+    @Query("SELECT * FROM planned_sessions WHERE id = :id") suspend fun get(id: Long): PlannedSessionEntity?
+    @Query("UPDATE planned_sessions SET status = :status WHERE status = 'PLANNED' AND scheduledAt < :now") suspend fun markMissed(now: Long, status: String = "MISSED")
+    @Query("DELETE FROM planned_sessions WHERE routineId = :routineId") suspend fun deleteByRoutine(routineId: Long)
+}
+
+@Dao
+interface WeeklyReflectionDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(r: WeeklyReflectionEntity)
+    @Query("SELECT * FROM weekly_reflections WHERE weekStart = :weekStart") fun observe(weekStart: Long): Flow<WeeklyReflectionEntity?>
+    @Query("SELECT * FROM weekly_reflections ORDER BY weekStart DESC") fun observeAll(): Flow<List<WeeklyReflectionEntity>>
 }

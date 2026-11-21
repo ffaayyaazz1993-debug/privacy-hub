@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Quiz
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timer
@@ -45,6 +47,8 @@ import com.privacyhub.app.ui.canvas.CanvasScreen
 import com.privacyhub.app.ui.focus.FocusScreen
 import com.privacyhub.app.ui.home.HomeScreen
 import com.privacyhub.app.ui.maps.MapsScreen
+import com.privacyhub.app.ui.planner.PlannerScreen
+import com.privacyhub.app.ui.search.SearchScreen
 import com.privacyhub.app.ui.review.ReviewScreen
 import com.privacyhub.app.ui.settings.SettingsScreen
 import com.privacyhub.app.ui.theme.FocusMapTheme
@@ -81,6 +85,7 @@ fun FocusMapApp() {
             Tab(Routes.HOME, "Home", Icons.Rounded.Home),
             Tab(Routes.MAPS, "Maps", Icons.Rounded.Hub),
             Tab(Routes.FOCUS, "Focus", Icons.Rounded.Timer),
+            Tab(Routes.PLANNER, "Planner", Icons.Rounded.DateRange),
             Tab(Routes.REVIEW, "Review", Icons.Rounded.Quiz),
             Tab(Routes.ANALYTICS, "Analytics", Icons.Rounded.BarChart),
             Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
@@ -111,10 +116,16 @@ fun FocusMapApp() {
                         onOpenProject = { nav.navigate(Routes.canvas(it)) },
                         onGoMaps = { nav.navigate(Routes.MAPS) },
                         onGoFocus = { nav.navigate(Routes.FOCUS) },
+                        onGoSearch = { nav.navigate(Routes.SEARCH) },
                     )
                 }
                 composable(Routes.MAPS) { MapsScreen(onOpenProject = { nav.navigate(Routes.canvas(it)) }) }
                 composable(Routes.FOCUS) { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) }
+                composable(Routes.PLANNER) { PlannerScreen() }
+                composable(Routes.SEARCH) { SearchScreen(
+                    onOpenProject = { nav.navigate(Routes.canvas(it)) },
+                    onOpenNode = { pid, _ -> nav.navigate(Routes.canvas(pid)) },
+                ) }
                 composable(Routes.REVIEW) { ReviewScreen() }
                 composable(
                     Routes.REVIEW_NODE,

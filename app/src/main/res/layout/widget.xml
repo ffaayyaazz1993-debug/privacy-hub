@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="12dp"
+    android:background="@android:color/background_dark"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <TextView android:id="@+id/widget_title" android:textColor="@android:color/white"
+        android:textSize="15sp" android:textStyle="bold" android:maxLines="1"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <TextView android:id="@+id/widget_sub" android:textColor="@android:color/white"
+        android:textSize="12sp" android:maxLines="2"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <TextView android:id="@+id/widget_line3" android:textColor="@android:color/white"
+        android:textSize="12sp" android:maxLines="2"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <TextView android:id="@+id/widget_line4" android:textColor="@android:color/white"
+        android:textSize="11sp" android:maxLines="2"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <Button android:id="@+id/widget_start" android:text="Start" android:textSize="10sp"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="36dp" />
+        <Button android:id="@+id/widget_pause" android:text="Pause" android:textSize="10sp"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="36dp" />
+        <Button android:id="@+id/widget_resume" android:text="Resume" android:textSize="10sp"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="36dp" />
+        <Button android:id="@+id/widget_open" android:text="Open" android:textSize="10sp"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="36dp" />
+    </LinearLayout>
+</LinearLayout>

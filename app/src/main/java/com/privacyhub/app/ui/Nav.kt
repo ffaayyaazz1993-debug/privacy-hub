@@ -6,6 +6,8 @@ object Routes {
     const val FOCUS = "focus"
     const val ANALYTICS = "analytics"
     const val SETTINGS = "settings"
+    const val PLANNER = "planner"
+    const val SEARCH = "search"
     const val REVIEW = "review"
     const val REVIEW_NODE = "review/node/{nodeId}"
     fun reviewNode(nodeId: Long) = "review/node/$nodeId"
