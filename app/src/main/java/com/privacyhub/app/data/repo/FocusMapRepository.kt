@@ -1,11 +1,19 @@
 package com.privacyhub.app.data.repo
 
+import androidx.room.withTransaction
 import com.privacyhub.app.data.db.FocusMapDatabase
+import com.privacyhub.app.data.db.FlashcardEntity
+import com.privacyhub.app.data.db.ReviewLogEntity
+import com.privacyhub.app.data.db.SchedulerSettingsEntity
 import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.db.UserSettingsEntity
 import com.privacyhub.app.domain.model.NodeStatus
+import com.privacyhub.app.domain.spaced.CardSchedule
+import com.privacyhub.app.domain.spaced.LearnState
+import com.privacyhub.app.domain.spaced.RecallRating
+import com.privacyhub.app.domain.spaced.ReviewScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -15,6 +23,65 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
     val nodes = db.nodeDao()
     val sessions = db.sessionDao()
     val settings = db.settingsDao()
+    val cards = db.flashcardDao()
+    val reviewLogs = db.reviewLogDao()
+    val schedulerSettings = db.schedulerSettingsDao()
+
+    fun observeSchedulerSettings(): Flow<SchedulerSettingsEntity> =
+        schedulerSettings.observe().map { it ?: SchedulerSettingsEntity() }
+
+    suspend fun ensureSchedulerSettings() {
+        if (schedulerSettings.get() == null) schedulerSettings.upsert(SchedulerSettingsEntity())
+    }
+
+    suspend fun createCard(projectId: Long, nodeId: Long, question: String, answer: String,
+                           hint: String = "", explanation: String = ""): Long {
+        val now = System.currentTimeMillis()
+        return cards.insert(FlashcardEntity(projectId = projectId, nodeId = nodeId,
+            question = question, answer = answer, hint = hint, explanation = explanation,
+            createdAt = now, updatedAt = now))
+    }
+
+    suspend fun duplicateCard(id: Long): Long? {
+        val c = cards.get(id) ?: return null
+        val now = System.currentTimeMillis()
+        return cards.insert(c.copy(id = 0, question = c.question + " (copy)", createdAt = now,
+            updatedAt = now, dueTimestamp = now, lastReviewTimestamp = 0L, stability = 0.0,
+            difficulty = 0.0, repetitions = 0, lapses = 0, learningState = "NEW",
+            learningStep = 0, intervalDays = 0, schedulerVersion = 0, reviewStatus = "NEW"))
+    }
+
+    /** Atomic: reschedule + log + card update. A rating is recorded at most once. */
+    suspend fun submitReview(card: FlashcardEntity, rating: RecallRating, now: Long,
+                             durationSeconds: Int): CardSchedule = db.withTransaction {
+        val cfg = schedulerSettings.get() ?: SchedulerSettingsEntity()
+        val elapsedDays = if (card.lastReviewTimestamp <= 0L) 0.0 else
+            (now - card.lastReviewTimestamp).toDouble() / ReviewScheduler.DAY_MS
+        val result = ReviewScheduler.schedule(
+            now = now, lastReviewAt = card.lastReviewTimestamp,
+            stateName = card.learningState, step = card.learningStep,
+            stability = card.stability, difficulty = card.difficulty,
+            repetitions = card.repetitions, lapses = card.lapses, rating = rating,
+            desiredRetention = cfg.desiredRetention, maximumInterval = cfg.maximumInterval,
+        )
+        reviewLogs.insert(ReviewLogEntity(
+            flashcardId = card.id, reviewedAt = now, rating = rating.name,
+            previousDueTimestamp = card.dueTimestamp, nextDueTimestamp = result.dueAt,
+            elapsedDays = elapsedDays, previousStability = card.stability,
+            newStability = result.stability, previousDifficulty = card.difficulty,
+            newDifficulty = result.difficulty, elapsedDurationSeconds = durationSeconds,
+            schedulerVersion = ReviewScheduler.VERSION,
+        ))
+        cards.update(card.copy(
+            dueTimestamp = result.dueAt, lastReviewTimestamp = now,
+            stability = result.stability, difficulty = result.difficulty,
+            repetitions = result.repetitions, lapses = result.lapses,
+            learningState = result.state.name, learningStep = result.step,
+            intervalDays = result.intervalDays, schedulerVersion = ReviewScheduler.VERSION,
+            reviewStatus = result.state.name, updatedAt = now,
+        ))
+        result
+    }
 
     fun observeSettings(): Flow<UserSettingsEntity> =
         settings.observe().map { it ?: UserSettingsEntity() }
@@ -64,6 +131,7 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
             byParent[id]?.forEach { doomed.add(it.id) }
         }
         ids.forEach { sessions.deleteByNode(it); nodes.deleteById(it) }
+        cards.deleteByNodeIds(ids.toList())
     }
 
     /** Record a finished focus session and roll its time into the node. */

@@ -155,6 +155,77 @@ fun AnalyticsScreen() {
                 }
             }
         }
+        item { KnowledgeAnalyticsCard() }
+    }
+}
+
+@Composable
+private fun KnowledgeAnalyticsCard() {
+    val repo = com.privacyhub.app.ui.repository()
+    val cards by repo.cards.observeAll().collectAsStateWithLifecycle(emptyList())
+    val logs by repo.reviewLogs.observeAll().collectAsStateWithLifecycle(emptyList())
+    val sessions by repo.sessions.observeAll().collectAsStateWithLifecycle(emptyList())
+    val projects by repo.projects.observeAll().collectAsStateWithLifecycle(emptyList())
+    val nodes by repo.nodes.observeAll().collectAsStateWithLifecycle(emptyList())
+    val cfg by repo.observeSchedulerSettings().collectAsStateWithLifecycle(
+        com.privacyhub.app.data.db.SchedulerSettingsEntity())
+    val now = System.currentTimeMillis()
+    val day = com.privacyhub.app.domain.spaced.ReviewScheduler.DAY_MS
+    val remembered = logs.count { it.rating == "GOOD" || it.rating == "EASY" }
+    val forgotten = logs.count { it.rating == "AGAIN" }
+    val accuracy = if (logs.isEmpty()) 0 else remembered * 100 / logs.size
+    val streak = logs.map { (it.reviewedAt / day) }.toSet().size
+    val avg = if (logs.isEmpty()) 0 else logs.sumOf { it.elapsedDurationSeconds.toLong() } / logs.size
+    val cardById = cards.associateBy { it.id }
+    fun projectOf(log: com.privacyhub.app.data.db.ReviewLogEntity) = cardById[log.flashcardId]?.projectId
+    val fsrs = com.privacyhub.app.domain.spaced.Fsrs(desiredRetention = cfg.desiredRetention,
+        maximumInterval = cfg.maximumInterval)
+    val predicted = cards.filter { it.stability > 0 }.map { c ->
+        fsrs.retrievability((now - c.lastReviewTimestamp).coerceAtLeast(0) / day.toDouble(), c.stability)
+    }
+    val predPct = if (predicted.isEmpty()) 0 else (predicted.sum() / predicted.size * 100).toInt()
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Knowledge analytics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Flashcards: ${cards.size} · Reviews: ${logs.size} · Due: ${cards.count { it.dueTimestamp <= now }} · Overdue: ${cards.count { it.dueTimestamp < now }}")
+            Text("Remembered: $remembered · Forgotten: $forgotten · Recall accuracy: $accuracy%")
+            Text("Review days: $streak · Average review time: ${avg}s")
+            Text("Scheduler-predicted recall now: $predPct% (model estimate, not measured memory strength)",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Text("By project (focus vs learning)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            projects.forEach { p ->
+                val pc = cards.filter { it.projectId == p.id }
+                val pl = logs.filter { projectOf(it) == p.id }
+                val pAcc = if (pl.isEmpty()) 0 else pl.count { it.rating == "GOOD" || it.rating == "EASY" } * 100 / pl.size
+                val pFocus = sessions.filter { it.projectId == p.id && it.status.name == "COMPLETED" }
+                    .sumOf { it.actualDurationSeconds.toLong() }
+                Text("${p.title}: focus ${formatDuration(pFocus)}",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("  cards ${pc.size} · reviews ${pl.size} · accuracy $pAcc%",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val weak = nodes.mapNotNull { n ->
+                val nl = logs.filter { cardById[it.flashcardId]?.nodeId == n.id }
+                if (nl.size >= 2) {
+                    val a = nl.count { it.rating == "GOOD" || it.rating == "EASY" } * 100 / nl.size
+                    n.title to a
+                } else null
+            }.sortedBy { it.second }.take(3)
+            if (weak.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text("Weak concepts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                weak.forEach { Text("${it.first}: ${it.second}% recall", style = MaterialTheme.typography.bodySmall) }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Upcoming workload (next 7 days)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            (0..6).forEach { d ->
+                val from = now + d * day
+                Text("Day $d: ${cards.count { it.dueTimestamp in from until from + day }} cards",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 

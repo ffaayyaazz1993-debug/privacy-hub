@@ -37,10 +37,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.ui.repository
+import com.privacyhub.app.ui.review.NodeLearningDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity) -> Unit) {
+fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity) -> Unit,
+                  onRecall: (NodeEntity) -> Unit, onReviewNode: (NodeEntity) -> Unit) {
     val repo = repository()
     val vm: CanvasViewModel = viewModel(factory = viewModelFactory { initializer { CanvasViewModel(repo, projectId) } })
     val project by vm.project.collectAsStateWithLifecycle()
@@ -49,6 +51,7 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
     var editing by remember { mutableStateOf<NodeEntity?>(null) }
     var showStats by remember { mutableStateOf(false) }
     var historyFor by remember { mutableStateOf<Long?>(null) }
+    var progressFor by remember { mutableStateOf<com.privacyhub.app.data.db.NodeEntity?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         MindMapCanvas(vm, Modifier.fillMaxSize())
@@ -73,7 +76,9 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
             }
         }
         if (selected != null) {
-            NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) }, onHistory = { historyFor = selected.id }, modifier = Modifier.align(Alignment.BottomCenter))
+            NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) },
+                onHistory = { historyFor = selected.id }, onRecall = { onRecall(selected) },
+                onReview = { onReviewNode(selected) }, onProgress = { progressFor = selected }, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
 
@@ -86,4 +91,7 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
         ProjectStatsDialog(nodes = ns, sessions = ss, onDismiss = { showStats = false })
     }
     historyFor?.let { id -> NodeHistoryDialog(nodeId = id, onDismiss = { historyFor = null }) }
+    progressFor?.let { n -> NodeLearningDialog(nodeId = n.id, nodeTitle = n.title,
+        focusSeconds = n.totalFocusSeconds, sessions = n.completedSessions,
+        onDismiss = { progressFor = null }) }
 }

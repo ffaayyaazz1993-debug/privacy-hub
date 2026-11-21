@@ -1,5 +1,7 @@
 package com.privacyhub.app.ui.settings
 
+import android.Manifest
+
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,6 +50,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.privacyhub.app.data.export.BackupManager
 import com.privacyhub.app.privacy.MaskConfig
 import com.privacyhub.app.privacy.MaskStore
+import com.privacyhub.app.ui.review.ReviewReminder
 import com.privacyhub.app.service.MaskService
 import com.privacyhub.app.ui.repository
 import kotlinx.coroutines.launch
@@ -91,6 +94,7 @@ fun SettingsScreen() {
 
         FocusWindowCard()
 
+        ReviewReminderCard()
         DataCard()
 
         Card { Column(Modifier.padding(16.dp)) {
@@ -208,6 +212,38 @@ private fun DataCard() {
                 OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text("Import") }
             }
             msg?.let { Spacer(Modifier.height(6.dp)); Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+@Composable
+private fun ReviewReminderCard() {
+    val context = LocalContext.current
+    val repo = repository()
+    val scope = rememberCoroutineScope()
+    val cfg by repo.observeSchedulerSettings().collectAsStateWithLifecycle(
+        initialValue = com.privacyhub.app.data.db.SchedulerSettingsEntity())
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text("Review reminders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("One daily notification when recall cards are due. The review system works with reminders off.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Remind me", modifier = Modifier.weight(1f))
+                Switch(checked = cfg.reminderEnabled, onCheckedChange = { on ->
+                    if (on && !ReviewReminder.canPost(context)) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    scope.launch {
+                        repo.schedulerSettings.upsert(cfg.copy(reminderEnabled = on))
+                        if (on) ReviewReminder.schedule(context, cfg.preferredReviewHour) else ReviewReminder.cancel(context)
+                    }
+                })
+            }
+            Text("Hour: ${cfg.preferredReviewHour}:00", style = MaterialTheme.typography.bodySmall)
+            Slider(value = cfg.preferredReviewHour.toFloat(),
+                onValueChange = { scope.launch { repo.schedulerSettings.upsert(cfg.copy(preferredReviewHour = it.toInt().coerceIn(0, 23))) } },
+                valueRange = 0f..23f, steps = 22)
         }
     }
 }

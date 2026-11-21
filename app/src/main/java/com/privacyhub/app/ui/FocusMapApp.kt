@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Quiz
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timer
@@ -44,6 +45,7 @@ import com.privacyhub.app.ui.canvas.CanvasScreen
 import com.privacyhub.app.ui.focus.FocusScreen
 import com.privacyhub.app.ui.home.HomeScreen
 import com.privacyhub.app.ui.maps.MapsScreen
+import com.privacyhub.app.ui.review.ReviewScreen
 import com.privacyhub.app.ui.settings.SettingsScreen
 import com.privacyhub.app.ui.theme.FocusMapTheme
 
@@ -53,7 +55,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 fun FocusMapApp() {
     val repo = repository()
     val settings by repo.observeSettings().collectAsStateWithLifecycle(initialValue = UserSettingsEntity())
-    LaunchedEffect(Unit) { repo.ensureSettings() }
+    LaunchedEffect(Unit) { repo.ensureSettings(); repo.ensureSchedulerSettings() }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -79,6 +81,7 @@ fun FocusMapApp() {
             Tab(Routes.HOME, "Home", Icons.Rounded.Home),
             Tab(Routes.MAPS, "Maps", Icons.Rounded.Hub),
             Tab(Routes.FOCUS, "Focus", Icons.Rounded.Timer),
+            Tab(Routes.REVIEW, "Review", Icons.Rounded.Quiz),
             Tab(Routes.ANALYTICS, "Analytics", Icons.Rounded.BarChart),
             Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
         )
@@ -112,6 +115,11 @@ fun FocusMapApp() {
                 }
                 composable(Routes.MAPS) { MapsScreen(onOpenProject = { nav.navigate(Routes.canvas(it)) }) }
                 composable(Routes.FOCUS) { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) }
+                composable(Routes.REVIEW) { ReviewScreen() }
+                composable(
+                    Routes.REVIEW_NODE,
+                    arguments = listOf(navArgument("nodeId") { type = NavType.LongType }),
+                ) { entry -> ReviewScreen(filterNodeId = entry.arguments?.getLong("nodeId")) }
                 composable(Routes.ANALYTICS) { AnalyticsScreen() }
                 composable(Routes.SETTINGS) { SettingsScreen() }
                 composable(
@@ -119,7 +127,9 @@ fun FocusMapApp() {
                     arguments = listOf(navArgument("projectId") { type = NavType.LongType }),
                 ) { entry ->
                     val pid = entry.arguments?.getLong("projectId") ?: 0L
-                    CanvasScreen(projectId = pid, onBack = { nav.popBackStack() }, onStartFocus = { node -> startFocus(node) })
+                    CanvasScreen(projectId = pid, onBack = { nav.popBackStack() }, onStartFocus = { node -> startFocus(node) },
+                        onRecall = { node -> nav.navigate(Routes.reviewNode(node.id)) },
+                        onReviewNode = { node -> nav.navigate(Routes.reviewNode(node.id)) })
                 }
             }
         }

@@ -30,6 +30,8 @@
             android:name=".ReaderActivity"
             android:exported="false" />
 
+        <receiver android:name=".ui.review.ReviewReminderReceiver" android:exported="false" />
+
         <service
             android:name=".service.MaskService"
             android:exported="false" />
