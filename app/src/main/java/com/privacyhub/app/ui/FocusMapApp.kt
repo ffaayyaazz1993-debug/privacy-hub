@@ -91,9 +91,8 @@ fun FocusMapApp() {
                             selected = currentRoute == t.route,
                             onClick = {
                                 nav.navigate(t.route) {
-                                    popUpTo(Routes.HOME) { saveState = true }
+                                    popUpTo(Routes.HOME)
                                     launchSingleTop = true
-                                    restoreState = true
                                 }
                             },
                             icon = { Icon(t.icon, contentDescription = t.label) },
