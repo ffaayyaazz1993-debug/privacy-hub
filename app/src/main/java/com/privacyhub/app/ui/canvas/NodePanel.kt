@@ -49,7 +49,7 @@ fun statusColor(s: NodeStatus): Color = when (s) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NodePanel(vm: CanvasViewModel, node: NodeEntity, onEdit: () -> Unit, onStartFocus: () -> Unit, onHistory: () -> Unit, onRecall: () -> Unit, onReview: () -> Unit, onProgress: () -> Unit, modifier: Modifier = Modifier) {
+fun NodePanel(vm: CanvasViewModel, node: NodeEntity, onEdit: () -> Unit, onStartFocus: () -> Unit, onHistory: () -> Unit, onRecall: () -> Unit, onReview: () -> Unit, onProgress: () -> Unit, onDetox: () -> Unit, modifier: Modifier = Modifier) {
     Card(modifier.fillMaxWidth().padding(12.dp)) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -73,6 +73,7 @@ fun NodePanel(vm: CanvasViewModel, node: NodeEntity, onEdit: () -> Unit, onStart
                 AssistChip(onClick = onRecall, label = { Text("Create Recall Question") })
                 AssistChip(onClick = onReview, label = { Text("Review Questions") })
                 AssistChip(onClick = onProgress, label = { Text("Learning Progress") })
+                AssistChip(onClick = onDetox, label = { Text("Detox profile") })
                 AssistChip(onClick = { vm.addChild(node.id) }, label = { Text("Child") })
                 AssistChip(onClick = { vm.addSibling(node.id) }, label = { Text("Sibling") })
                 AssistChip(onClick = onEdit, label = { Text("Edit") })

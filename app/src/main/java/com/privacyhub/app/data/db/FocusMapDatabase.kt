@@ -133,8 +133,10 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 @Database(
     entities = [ProjectEntity::class, NodeEntity::class, FocusSessionEntity::class, UserSettingsEntity::class,
     FlashcardEntity::class, ReviewLogEntity::class, SchedulerSettingsEntity::class,
-    ReferenceEntity::class, RoutineEntity::class, PlannedSessionEntity::class, WeeklyReflectionEntity::class],
-    version = 3,
+    ReferenceEntity::class, RoutineEntity::class, PlannedSessionEntity::class, WeeklyReflectionEntity::class,
+    DetoxProfileEntity::class, DetoxAppEntity::class, NodeDetoxEntity::class,
+    DetoxScheduleEntity::class, DetoxActivationEntity::class],
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -150,6 +152,7 @@ abstract class FocusMapDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
     abstract fun plannedSessionDao(): PlannedSessionDao
     abstract fun weeklyReflectionDao(): WeeklyReflectionDao
+    abstract fun detoxDao(): DetoxDao
 
 
     companion object {
@@ -157,7 +160,7 @@ abstract class FocusMapDatabase : RoomDatabase() {
         fun get(context: Context): FocusMapDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, FocusMapDatabase::class.java, "focusmap.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }

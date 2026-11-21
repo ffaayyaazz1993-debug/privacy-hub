@@ -38,11 +38,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.ui.repository
 import com.privacyhub.app.ui.review.NodeLearningDialog
+import com.privacyhub.app.ui.detox.NodeDetoxDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity) -> Unit,
-                  onRecall: (NodeEntity) -> Unit, onReviewNode: (NodeEntity) -> Unit) {
+                  onRecall: (NodeEntity) -> Unit, onReviewNode: (NodeEntity) -> Unit,
+                  onDetoxNode: (NodeEntity) -> Unit = {}) {
     val repo = repository()
     val vm: CanvasViewModel = viewModel(factory = viewModelFactory { initializer { CanvasViewModel(repo, projectId) } })
     val project by vm.project.collectAsStateWithLifecycle()
@@ -52,6 +54,7 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
     var showStats by remember { mutableStateOf(false) }
     var historyFor by remember { mutableStateOf<Long?>(null) }
     var progressFor by remember { mutableStateOf<com.privacyhub.app.data.db.NodeEntity?>(null) }
+    var detoxFor by remember { mutableStateOf<com.privacyhub.app.data.db.NodeEntity?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         MindMapCanvas(vm, Modifier.fillMaxSize())
@@ -78,7 +81,8 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
         if (selected != null) {
             NodePanel(vm, selected, onEdit = { editing = selected }, onStartFocus = { onStartFocus(selected) },
                 onHistory = { historyFor = selected.id }, onRecall = { onRecall(selected) },
-                onReview = { onReviewNode(selected) }, onProgress = { progressFor = selected }, modifier = Modifier.align(Alignment.BottomCenter))
+                onReview = { onReviewNode(selected) }, onProgress = { progressFor = selected },
+                onDetox = { detoxFor = selected }, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
 
@@ -94,4 +98,5 @@ fun CanvasScreen(projectId: Long, onBack: () -> Unit, onStartFocus: (NodeEntity)
     progressFor?.let { n -> NodeLearningDialog(nodeId = n.id, nodeTitle = n.title,
         focusSeconds = n.totalFocusSeconds, sessions = n.completedSessions,
         onDismiss = { progressFor = null }) }
+    detoxFor?.let { n -> NodeDetoxDialog(nodeId = n.id, nodeTitle = n.title, onDismiss = { detoxFor = null }) }
 }

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Quiz
 import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Settings
@@ -49,6 +50,7 @@ import com.privacyhub.app.ui.home.HomeScreen
 import com.privacyhub.app.ui.maps.MapsScreen
 import com.privacyhub.app.ui.planner.PlannerScreen
 import com.privacyhub.app.ui.search.SearchScreen
+import com.privacyhub.app.ui.detox.DetoxScreen
 import com.privacyhub.app.ui.review.ReviewScreen
 import com.privacyhub.app.ui.settings.SettingsScreen
 import com.privacyhub.app.ui.theme.FocusMapTheme
@@ -86,6 +88,7 @@ fun FocusMapApp() {
             Tab(Routes.MAPS, "Maps", Icons.Rounded.Hub),
             Tab(Routes.FOCUS, "Focus", Icons.Rounded.Timer),
             Tab(Routes.PLANNER, "Planner", Icons.Rounded.DateRange),
+            Tab(Routes.DETOX, "Detox", Icons.Rounded.Block),
             Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
         )
         val showBar = tabs.any { it.route == currentRoute } ||
@@ -103,7 +106,7 @@ fun FocusMapApp() {
                                 }
                             },
                             icon = { Icon(t.icon, contentDescription = t.label) },
-                            label = { Text(t.label, maxLines = 1, fontSize = 9.sp, style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(t.label, maxLines = 1, fontSize = 8.sp, style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
@@ -121,6 +124,7 @@ fun FocusMapApp() {
                 composable(Routes.MAPS) { MapsScreen(onOpenProject = { nav.navigate(Routes.canvas(it)) }) }
                 composable(Routes.FOCUS) { FocusScreen(onGoMaps = { nav.navigate(Routes.MAPS) }) }
                 composable(Routes.PLANNER) { PlannerScreen() }
+                composable(Routes.DETOX) { DetoxScreen() }
                 composable(Routes.SEARCH) { SearchScreen(
                     onOpenProject = { nav.navigate(Routes.canvas(it)) },
                     onOpenNode = { pid, _ -> nav.navigate(Routes.canvas(pid)) },

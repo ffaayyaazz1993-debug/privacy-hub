@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">FocusMap</string>
+    <string name="detox_service_description">Blocks user-selected distracting apps during active Focus sessions. Only the foreground app identity is observed; no content is read.</string>
 </resources>

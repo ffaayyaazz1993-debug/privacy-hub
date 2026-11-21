@@ -223,3 +223,83 @@ data class WeeklyReflectionEntity(
     val priority: String = "",
     val updatedAt: Long = System.currentTimeMillis(),
 )
+
+/** A reusable attention-protection profile. */
+@Entity(
+    tableName = "detox_profiles",
+    foreignKeys = [ForeignKey(entity = ProjectEntity::class, parentColumns = ["id"], childColumns = ["projectId"],
+        onDelete = ForeignKey.CASCADE)],
+    indices = [Index("isDefault"), Index("projectId")],
+)
+data class DetoxProfileEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val description: String = "",
+    val isDefault: Boolean = false,
+    val dndEnabled: Boolean = false,
+    val pauseBehaviour: String = "KEEP", // KEEP | SUSPEND
+    val emergencyEnabled: Boolean = true,
+    val autoActivate: Boolean = true,
+    val projectId: Long? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+/** One restricted package inside a profile. */
+@Entity(
+    tableName = "detox_apps",
+    foreignKeys = [ForeignKey(entity = DetoxProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"],
+        onDelete = ForeignKey.CASCADE)],
+    indices = [Index("profileId"), Index("packageName")],
+)
+data class DetoxAppEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val packageName: String,
+    val label: String = "",
+)
+
+/** Optional per-node override of the project profile. */
+@Entity(tableName = "node_detox", indices = [Index(value = ["nodeId", "profileId"])])
+data class NodeDetoxEntity(
+    @PrimaryKey val nodeId: Long,
+    val profileId: Long? = null,
+    val autoActivate: Boolean = true,
+)
+
+/** Recurring independent Detox schedule (minutes since midnight). */
+@Entity(
+    tableName = "detox_schedules",
+    foreignKeys = [ForeignKey(entity = DetoxProfileEntity::class, parentColumns = ["id"], childColumns = ["profileId"],
+        onDelete = ForeignKey.CASCADE)],
+    indices = [Index("enabled")],
+)
+data class DetoxScheduleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val profileId: Long,
+    val weekdays: String = "0,1,2,3,4,5,6",
+    val startMinute: Int = 18 * 60,
+    val endMinute: Int = 19 * 60,
+    val enabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+/**
+ * One activation source. Never collapse Detox to a single boolean:
+ * POMODORO / SCHEDULED / MANUAL rows stay independently addressable.
+ */
+@Entity(
+    tableName = "detox_activations",
+    indices = [Index("sourceType"), Index("sourceId"), Index("status")],
+)
+data class DetoxActivationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceType: String,
+    val sourceId: String,
+    val profileId: Long,
+    val startedAt: Long = System.currentTimeMillis(),
+    val endsAt: Long = 0L,
+    val overrideUntil: Long = 0L,
+    val status: String = "ACTIVE",
+    val focusSessionId: Long? = null,
+)

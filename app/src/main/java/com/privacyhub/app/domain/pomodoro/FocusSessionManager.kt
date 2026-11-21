@@ -14,13 +14,19 @@ class FocusSessionManager(private val repo: FocusMapRepository) {
     suspend fun start(projectId: Long, nodeId: Long, type: SessionType, plannedSeconds: Int): Long {
         active()?.let { stop(it) }
         val now = System.currentTimeMillis()
-        return repo.sessions.insert(
+        val id = repo.sessions.insert(
             FocusSessionEntity(
                 projectId = projectId, nodeId = nodeId, type = type,
                 startTimestamp = now, plannedDurationSeconds = plannedSeconds,
                 status = SessionStatus.RUNNING, accumulatedSeconds = 0, resumeTimestamp = now,
             )
         )
+        // Existing timer owns timing; Detox is a best-effort side effect and can
+        // never break the Pomodoro session if the Detox tables are unavailable.
+        if (type == SessionType.FOCUS) runCatching {
+            repo.activateForPomodoro(id, projectId, nodeId, plannedSeconds * 1000L)
+        }
+        return id
     }
 
     suspend fun pause(s: FocusSessionEntity) {
@@ -28,11 +34,19 @@ class FocusSessionManager(private val repo: FocusMapRepository) {
         val now = System.currentTimeMillis()
         val banked = Pomodoro.elapsedSeconds(s, now)
         repo.sessions.update(s.copy(status = SessionStatus.PAUSED, accumulatedSeconds = banked, resumeTimestamp = null))
+        if (s.type == SessionType.FOCUS) runCatching {
+            val p = repo.resolveDetoxProfile(s.projectId, s.nodeId)
+            if (p?.pauseBehaviour == "SUSPEND") repo.setPauseBehaviour(s.id, suspend = true)
+        }
     }
 
     suspend fun resume(s: FocusSessionEntity) {
         if (s.status != SessionStatus.PAUSED) return
         repo.sessions.update(s.copy(status = SessionStatus.RUNNING, resumeTimestamp = System.currentTimeMillis()))
+        if (s.type == SessionType.FOCUS) runCatching {
+            val p = repo.resolveDetoxProfile(s.projectId, s.nodeId)
+            if (p?.pauseBehaviour == "SUSPEND") repo.setPauseBehaviour(s.id, suspend = false)
+        }
     }
 
     suspend fun restart(s: FocusSessionEntity) {
@@ -46,12 +60,14 @@ class FocusSessionManager(private val repo: FocusMapRepository) {
         val now = System.currentTimeMillis()
         val actual = Pomodoro.elapsedSeconds(s, now).toInt()
         repo.sessions.update(s.copy(status = SessionStatus.STOPPED, endTimestamp = now, actualDurationSeconds = actual, resumeTimestamp = null))
+        if (s.type == SessionType.FOCUS) runCatching { repo.releaseForPomodoro(s.id) }
         if (s.type == SessionType.FOCUS && actual > 0) recordPartialFocus(s.nodeId, actual.toLong())
     }
 
     suspend fun skip(s: FocusSessionEntity) {
         val now = System.currentTimeMillis()
         repo.sessions.update(s.copy(status = SessionStatus.SKIPPED, endTimestamp = now, actualDurationSeconds = Pomodoro.elapsedSeconds(s, now).toInt(), resumeTimestamp = null))
+        if (s.type == SessionType.FOCUS) runCatching { repo.releaseForPomodoro(s.id) }
     }
 
     /** Finish: ranToEnd=true means the countdown reached zero (actual = planned). */
@@ -60,7 +76,10 @@ class FocusSessionManager(private val repo: FocusMapRepository) {
         val now = System.currentTimeMillis()
         val actual = if (ranToEnd) s.plannedDurationSeconds else Pomodoro.elapsedSeconds(s, now).toInt()
         val finished = s.copy(status = SessionStatus.COMPLETED, endTimestamp = now, actualDurationSeconds = actual, accumulatedSeconds = actual.toLong(), resumeTimestamp = null)
-        if (s.type == SessionType.FOCUS) repo.completeFocusSession(finished) else repo.sessions.update(finished)
+        if (s.type == SessionType.FOCUS) {
+            runCatching { repo.releaseForPomodoro(s.id) }
+            repo.completeFocusSession(finished)
+        } else repo.sessions.update(finished)
     }
 
     private suspend fun recordPartialFocus(nodeId: Long, seconds: Long) {

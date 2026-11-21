@@ -168,3 +168,43 @@ interface WeeklyReflectionDao {
     @Query("SELECT * FROM weekly_reflections WHERE weekStart = :weekStart") fun observe(weekStart: Long): Flow<WeeklyReflectionEntity?>
     @Query("SELECT * FROM weekly_reflections ORDER BY weekStart DESC") fun observeAll(): Flow<List<WeeklyReflectionEntity>>
 }
+
+@Dao
+interface DetoxDao {
+    // profiles + apps
+    @Insert suspend fun insertProfile(p: DetoxProfileEntity): Long
+    @Update suspend fun updateProfile(p: DetoxProfileEntity)
+    @Query("DELETE FROM detox_profiles WHERE id = :id") suspend fun deleteProfile(id: Long)
+    @Query("SELECT * FROM detox_profiles ORDER BY isDefault DESC, createdAt ASC") fun observeProfiles(): Flow<List<DetoxProfileEntity>>
+    @Query("SELECT * FROM detox_profiles WHERE id = :id") suspend fun profile(id: Long): DetoxProfileEntity?
+    @Query("UPDATE detox_profiles SET isDefault = 0") suspend fun clearDefaults()
+    @Query("SELECT * FROM detox_apps WHERE profileId = :pid ORDER BY label") fun observeApps(pid: Long): Flow<List<DetoxAppEntity>>
+    @Insert suspend fun insertApp(a: DetoxAppEntity): Long
+    @Query("DELETE FROM detox_apps WHERE profileId = :pid AND packageName = :pkg") suspend fun removeApp(pid: Long, pkg: String)
+    @Query("DELETE FROM detox_apps WHERE profileId = :pid") suspend fun clearApps(pid: Long)
+    @Query("SELECT packageName FROM detox_apps WHERE profileId IN (:ids)") suspend fun packagesFor(ids: List<Long>): List<String>
+    @Query("SELECT * FROM detox_apps") suspend fun observeAllApps(): List<DetoxAppEntity>
+    @Query("SELECT * FROM node_detox") suspend fun observeNodeConfigs(): List<NodeDetoxEntity>
+
+    // node overrides
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertNode(n: NodeDetoxEntity)
+    @Query("SELECT * FROM node_detox WHERE nodeId = :nodeId") suspend fun nodeConfig(nodeId: Long): NodeDetoxEntity?
+
+    // schedules
+    @Insert suspend fun insertSchedule(s: DetoxScheduleEntity): Long
+    @Update suspend fun updateSchedule(s: DetoxScheduleEntity)
+    @Query("DELETE FROM detox_schedules WHERE id = :id") suspend fun deleteSchedule(id: Long)
+    @Query("SELECT * FROM detox_schedules WHERE enabled = 1") fun observeSchedules(): Flow<List<DetoxScheduleEntity>>
+    @Query("SELECT * FROM detox_schedules WHERE enabled = 1") suspend fun activeSchedules(): List<DetoxScheduleEntity>
+    @Query("SELECT * FROM detox_schedules WHERE id = :id") suspend fun schedule(id: Long): DetoxScheduleEntity?
+
+    // activations
+    @Insert suspend fun insertActivation(a: DetoxActivationEntity): Long
+    @Update suspend fun updateActivation(a: DetoxActivationEntity)
+    @Query("SELECT * FROM detox_activations WHERE status = 'ACTIVE' ORDER BY startedAt ASC") fun observeActivations(): Flow<List<DetoxActivationEntity>>
+    @Query("SELECT * FROM detox_activations WHERE status = 'ACTIVE'") suspend fun currentActivations(): List<DetoxActivationEntity>
+    @Query("SELECT * FROM detox_activations WHERE sourceType = :type AND sourceId = :sid ORDER BY startedAt DESC LIMIT 1") suspend fun activationFor(type: String, sid: String): DetoxActivationEntity?
+    @Query("SELECT * FROM detox_activations WHERE focusSessionId = :focusId AND status = 'ACTIVE'") suspend fun activationForFocus(focusId: Long): DetoxActivationEntity?
+    @Query("SELECT * FROM detox_activations ORDER BY startedAt DESC") fun observeHistory(): Flow<List<DetoxActivationEntity>>
+    @Query("SELECT COUNT(*) FROM detox_activations WHERE sourceType = 'POMODORO' AND status = 'RELEASED'") fun releasedCount(): Flow<Int>
+}

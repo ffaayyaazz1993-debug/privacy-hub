@@ -1,7 +1,14 @@
 package com.privacyhub.app.data.repo
 
 import androidx.room.withTransaction
+import com.privacyhub.app.data.db.DetoxActivationEntity
+import com.privacyhub.app.data.db.DetoxAppEntity
+import com.privacyhub.app.data.db.DetoxProfileEntity
+import com.privacyhub.app.data.db.DetoxScheduleEntity
 import com.privacyhub.app.data.db.FocusMapDatabase
+import com.privacyhub.app.data.db.NodeDetoxEntity
+import com.privacyhub.app.domain.detox.DetoxCoordinator
+import com.privacyhub.app.domain.detox.DetoxSource
 import com.privacyhub.app.domain.export.ExportProject
 import com.privacyhub.app.domain.export.OutlineNode
 import com.privacyhub.app.data.db.PlannedSessionEntity
@@ -21,6 +28,7 @@ import com.privacyhub.app.domain.spaced.LearnState
 import com.privacyhub.app.domain.spaced.RecallRating
 import com.privacyhub.app.domain.spaced.ReviewScheduler
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import kotlinx.coroutines.flow.map
 
@@ -37,6 +45,7 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
     val routines = db.routineDao()
     val planned = db.plannedSessionDao()
     val reflections = db.weeklyReflectionDao()
+    val detox = db.detoxDao()
 
     fun observeSchedulerSettings(): Flow<SchedulerSettingsEntity> =
         schedulerSettings.observe().map { it ?: SchedulerSettingsEntity() }
@@ -234,6 +243,110 @@ class FocusMapRepository(private val db: FocusMapDatabase) {
         add(root.id, source.nodes)
         return pid
     }
+
+    // ---- Digital Detox ----
+    fun observeProfiles() = detox.observeProfiles()
+    fun observeDetoxApps(pid: Long) = detox.observeApps(pid)
+    fun observeSchedules() = detox.observeSchedules()
+    fun observeActivations() = detox.observeActivations()
+    fun observeDetoxHistory() = detox.observeHistory()
+
+    suspend fun saveProfile(p: DetoxProfileEntity): Long {
+        if (p.isDefault) detox.clearDefaults()
+        return if (p.id == 0L) detox.insertProfile(p) else { detox.updateProfile(p); p.id }
+    }
+
+    suspend fun deleteProfile(id: Long) = detox.deleteProfile(id)
+
+    suspend fun addBlockedApp(profileId: Long, packageName: String, label: String) =
+        detox.insertApp(DetoxAppEntity(profileId = profileId, packageName = packageName, label = label))
+
+    suspend fun removeBlockedApp(profileId: Long, packageName: String) = detox.removeApp(profileId, packageName)
+
+    suspend fun duplicateProfile(id: Long): Long? {
+        val src = detox.profile(id) ?: return null
+        val apps = detox.observeApps(id)
+        val newId = detox.insertProfile(src.copy(id = 0, name = src.name + " (copy)", isDefault = false))
+        // copy selected apps deterministically
+        apps.first().forEach { a -> detox.insertApp(a.copy(id = 0, profileId = newId)) }
+        return newId
+    }
+
+    suspend fun setNodeDetox(nodeId: Long, profileId: Long?, autoActivate: Boolean = true) =
+        detox.upsertNode(NodeDetoxEntity(nodeId, profileId, autoActivate))
+
+    suspend fun nodeDetox(nodeId: Long): NodeDetoxEntity? = detox.nodeConfig(nodeId)
+
+    suspend fun saveSchedule(s: DetoxScheduleEntity): Long =
+        if (s.id == 0L) detox.insertSchedule(s) else { detox.updateSchedule(s); s.id }
+
+    suspend fun deleteSchedule(id: Long) = detox.deleteSchedule(id)
+    suspend fun schedule(id: Long): DetoxScheduleEntity? = detox.schedule(id)
+
+    /** Profile resolution for a Pomodoro session, matching the documented priority. */
+    suspend fun resolveDetoxProfile(projectId: Long, nodeId: Long, explicitId: Long? = null): DetoxProfileEntity? {
+        val profiles = detox.observeProfiles().first()
+        val nodeCfg = detox.nodeConfig(nodeId)
+        return DetoxCoordinator.resolveProfile(explicitId, nodeId, projectId, profiles,
+            mapOf(nodeId to nodeCfg?.profileId))
+    }
+
+    suspend fun activateForPomodoro(focusSessionId: Long, projectId: Long, nodeId: Long,
+                                    plannedMillis: Long, explicitProfileId: Long? = null): DetoxActivationEntity? {
+        val profile = resolveDetoxProfile(projectId, nodeId, explicitProfileId) ?: return null
+        if (!profile.autoActivate) return null
+        val now = System.currentTimeMillis()
+        val existing = detox.activationForFocus(focusSessionId)
+        if (existing != null) return existing
+        val id = detox.insertActivation(DetoxActivationEntity(
+            sourceType = DetoxSource.POMODORO.key, sourceId = focusSessionId.toString(),
+            profileId = profile.id, startedAt = now, endsAt = now + plannedMillis,
+            status = "ACTIVE", focusSessionId = focusSessionId))
+        return detox.activationFor("POMODORO", focusSessionId.toString())
+    }
+
+    suspend fun releaseForPomodoro(focusSessionId: Long) {
+        val a = detox.activationForFocus(focusSessionId) ?: return
+        if (a.status == "ACTIVE") detox.updateActivation(a.copy(status = "RELEASED", endsAt = System.currentTimeMillis()))
+    }
+
+    suspend fun setPauseBehaviour(focusSessionId: Long, suspend: Boolean) {
+        val a = detox.activationForFocus(focusSessionId) ?: return
+        if (a.status != "ACTIVE") return
+        detox.updateActivation(if (suspend) a.copy(status = "PAUSED") else a.copy(status = "ACTIVE"))
+    }
+
+    suspend fun startManualDetox(profileId: Long, durationMinutes: Int): DetoxActivationEntity {
+        val now = System.currentTimeMillis()
+        val id = detox.insertActivation(DetoxActivationEntity(sourceType = DetoxSource.MANUAL.key,
+            sourceId = "manual-$now", profileId = profileId, startedAt = now,
+            endsAt = if (durationMinutes <= 0) 0L else now + durationMinutes * 60_000L))
+        return detox.activationFor("MANUAL", "manual-$now")!!
+    }
+
+    suspend fun endManualDetox(activationId: Long) {
+        val a = detox.currentActivations().firstOrNull { it.id == activationId } ?: return
+        detox.updateActivation(a.copy(status = "ENDED", endsAt = System.currentTimeMillis()))
+    }
+
+    suspend fun startScheduledDetox(scheduleId: Long, profileId: Long, endsAt: Long): DetoxActivationEntity? {
+        val src = "schedule-$scheduleId"
+        val existing = detox.activationFor("SCHEDULED", src)
+        if (existing != null && DetoxCoordinator.isSourceLive(existing, System.currentTimeMillis())) return existing
+        val id = detox.insertActivation(DetoxActivationEntity(sourceType = DetoxSource.SCHEDULED.key,
+            sourceId = src, profileId = profileId, startedAt = System.currentTimeMillis(), endsAt = endsAt))
+        return detox.activationFor("SCHEDULED", src)
+    }
+
+    suspend fun emergencyOverride(activationId: Long, minutes: Int) {
+        val a = detox.currentActivations().firstOrNull { it.id == activationId } ?: return
+        detox.updateActivation(a.copy(overrideUntil = System.currentTimeMillis() + minutes * 60_000L))
+    }
+
+    suspend fun currentActivations(): List<DetoxActivationEntity> = detox.currentActivations()
+    suspend fun activeSchedules(): List<DetoxScheduleEntity> = detox.activeSchedules()
+    suspend fun profileById(id: Long): DetoxProfileEntity? = detox.profile(id)
+    suspend fun blockedPackages(profileIds: List<Long>): List<String> = detox.packagesFor(profileIds)
 
     suspend fun saveReflection(r: WeeklyReflectionEntity) = reflections.upsert(r.copy(updatedAt = System.currentTimeMillis()))
 }

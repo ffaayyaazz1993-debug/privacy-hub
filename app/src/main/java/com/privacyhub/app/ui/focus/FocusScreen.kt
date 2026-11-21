@@ -77,6 +77,7 @@ import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.domain.model.NodeStatus
 import com.privacyhub.app.domain.model.SessionStatus
+import com.privacyhub.app.domain.detox.DetoxCoordinator
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
@@ -97,6 +98,8 @@ fun FocusScreen(onGoMaps: () -> Unit) {
     val node by vm.activeNode.collectAsStateWithLifecycle()
     val suggested by vm.suggestedNode.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val detoxActs by repo.observeActivations().collectAsStateWithLifecycle(emptyList())
+    val detoxProfiles by repo.observeProfiles().collectAsStateWithLifecycle(emptyList())
     val latest by vm.latestCompletedFocus.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
@@ -160,6 +163,24 @@ fun FocusScreen(onGoMaps: () -> Unit) {
             onToggleDone = { n -> vm.toggleNodeDone(n) },
             onDismiss = { if (s != null) vm.stop() else onGoMaps() },
             onPick = onGoMaps)
+
+        val liveDetox = DetoxCoordinator.liveSources(detoxActs, System.currentTimeMillis())
+        if (liveDetox.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Digital Detox active", style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold)
+                    Text(liveDetox.joinToString(" · ") { a ->
+                        detoxProfiles.firstOrNull { it.id == a.profileId }?.name ?: "Detox"
+                    }, style = MaterialTheme.typography.bodySmall)
+                    Text("${liveDetox.size} source(s) protecting this session",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
 
         Spacer(Modifier.height(18.dp))
 

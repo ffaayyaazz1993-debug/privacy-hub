@@ -6,6 +6,11 @@ import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.ReviewLogEntity
 import com.privacyhub.app.data.db.SchedulerSettingsEntity
 import com.privacyhub.app.data.db.NodeEntity
+import com.privacyhub.app.data.db.DetoxActivationEntity
+import com.privacyhub.app.data.db.DetoxAppEntity
+import com.privacyhub.app.data.db.DetoxProfileEntity
+import com.privacyhub.app.data.db.DetoxScheduleEntity
+import com.privacyhub.app.data.db.NodeDetoxEntity
 import com.privacyhub.app.data.db.PlannedSessionEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.db.ReferenceEntity
@@ -18,7 +23,7 @@ import kotlinx.coroutines.flow.first
 /** Open-JSON export/import so users are never locked in. Import merges (remaps ids). */
 class BackupManager(private val repo: FocusMapRepository) {
     data class Backup(
-        val version: Int = 3,
+        val version: Int = 4,
         val exportedAt: Long = System.currentTimeMillis(),
         val projects: List<ProjectEntity> = emptyList(),
         val nodes: List<NodeEntity> = emptyList(),
@@ -31,6 +36,11 @@ class BackupManager(private val repo: FocusMapRepository) {
         val routines: List<RoutineEntity> = emptyList(),
         val plannedSessions: List<PlannedSessionEntity> = emptyList(),
         val weeklyReflections: List<WeeklyReflectionEntity> = emptyList(),
+        val detoxProfiles: List<DetoxProfileEntity> = emptyList(),
+        val detoxApps: List<DetoxAppEntity> = emptyList(),
+        val detoxSchedules: List<DetoxScheduleEntity> = emptyList(),
+        val detoxActivations: List<DetoxActivationEntity> = emptyList(),
+        val nodeDetox: List<NodeDetoxEntity> = emptyList(),
     )
 
     companion object {
@@ -70,12 +80,17 @@ class BackupManager(private val repo: FocusMapRepository) {
         routines = repo.routines.observeAll().first(),
         plannedSessions = repo.planned.observeAll().first(),
         weeklyReflections = repo.reflections.observeAll().first(),
+        detoxProfiles = repo.detox.observeProfiles().first(),
+        detoxApps = repo.detox.observeAllApps(),
+        detoxSchedules = repo.detox.observeSchedules().first(),
+        detoxActivations = repo.detox.observeHistory().first(),
+        nodeDetox = repo.detox.observeNodeConfigs(),
     ))
 
     /** Returns the number of projects imported. Existing data is preserved. */
     suspend fun importJson(json: String): Int {
         val backup = deserialize(json) ?: throw IllegalArgumentException("Invalid or unsupported FocusMap backup file")
-        if (backup.version > 3) throw IllegalArgumentException("Backup version ${backup.version} is newer than supported (3)")
+        if (backup.version > 4) throw IllegalArgumentException("Backup version ${backup.version} is newer than supported (4)")
         val projectsIn = backup.projects.orEmpty()
         val nodesIn = backup.nodes.orEmpty()
         val sessionsIn = backup.sessions.orEmpty()
@@ -84,6 +99,11 @@ class BackupManager(private val repo: FocusMapRepository) {
         val refsIn = backup.references.orEmpty()
         val routinesIn = backup.routines.orEmpty()
         val plannedIn = backup.plannedSessions.orEmpty()
+        val dProfilesIn = backup.detoxProfiles.orEmpty()
+        val dAppsIn = backup.detoxApps.orEmpty()
+        val dSchedulesIn = backup.detoxSchedules.orEmpty()
+        val dActivationsIn = backup.detoxActivations.orEmpty()
+        val nodeDetoxIn = backup.nodeDetox.orEmpty()
         var count = 0
         for (p in projectsIn) {
             val now = System.currentTimeMillis()
@@ -127,6 +147,23 @@ class BackupManager(private val repo: FocusMapRepository) {
                 val nid = idMap[ps.nodeId] ?: continue
                 repo.planned.insert(ps.copy(id = 0, routineId = routineMap[ps.routineId]!!,
                     projectId = newPid, nodeId = nid))
+            }
+            val profileMap = HashMap<Long, Long>()
+            for (dp in dProfilesIn.filter { it.projectId == null || it.projectId == p.id }) {
+                val newProfileId = repo.detox.insertProfile(dp.copy(id = 0, projectId = if (dp.projectId == p.id) newPid else dp.projectId))
+                profileMap[dp.id] = newProfileId
+            }
+            for (da in dAppsIn.filter { profileMap.containsKey(it.profileId) }) {
+                repo.detox.insertApp(da.copy(id = 0, profileId = profileMap[da.profileId]!!))
+            }
+            for (ds in dSchedulesIn.filter { profileMap.containsKey(it.profileId) }) {
+                repo.detox.insertSchedule(ds.copy(id = 0, profileId = profileMap[ds.profileId]!!))
+            }
+            for (nd in nodeDetoxIn.filter { idMap.containsKey(it.nodeId) }) {
+                repo.detox.upsertNode(nd.copy(nodeId = idMap[nd.nodeId]!!, profileId = nd.profileId?.let { profileMap[it] }))
+            }
+            for (act in dActivationsIn.filter { profileMap.containsKey(it.profileId) }) {
+                repo.detox.insertActivation(act.copy(id = 0, profileId = profileMap[act.profileId]!!))
             }
             count++
         }
