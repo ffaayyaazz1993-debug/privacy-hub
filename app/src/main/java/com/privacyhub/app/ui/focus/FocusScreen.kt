@@ -5,8 +5,12 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -77,13 +81,13 @@ import com.privacyhub.app.data.db.FocusSessionEntity
 import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.domain.model.NodeStatus
 import com.privacyhub.app.domain.model.SessionStatus
-import com.privacyhub.app.domain.detox.DetoxCoordinator
 import com.privacyhub.app.domain.model.SessionType
 import com.privacyhub.app.privacy.MaskStore
 import com.privacyhub.app.service.MaskService
 import com.privacyhub.app.ui.repository
 import com.privacyhub.app.util.formatClock
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -92,14 +96,11 @@ fun FocusScreen(onGoMaps: () -> Unit) {
     val repo = repository()
     val vm: FocusViewModel = viewModel(factory = viewModelFactory { initializer { FocusViewModel(repo) } })
     val active by vm.active.collectAsStateWithLifecycle()
-    val remaining by vm.remaining.collectAsStateWithLifecycle()
-    val progress by vm.progress.collectAsStateWithLifecycle()
     val project by vm.activeProject.collectAsStateWithLifecycle()
     val node by vm.activeNode.collectAsStateWithLifecycle()
     val suggested by vm.suggestedNode.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val detoxActs by repo.observeActivations().collectAsStateWithLifecycle(emptyList())
-    val detoxProfiles by repo.observeProfiles().collectAsStateWithLifecycle(emptyList())
+    val detoxSummary by vm.detoxSummary.collectAsStateWithLifecycle("")
     val latest by vm.latestCompletedFocus.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val view = LocalView.current
@@ -135,10 +136,6 @@ fun FocusScreen(onGoMaps: () -> Unit) {
     val kind = when (s?.type) {
         SessionType.FOCUS -> "FOCUS"; SessionType.SHORT_BREAK -> "SHORT BREAK"; SessionType.LONG_BREAK -> "LONG BREAK"; else -> "READY"
     }
-    val elapsed = if (s != null) (s.plannedDurationSeconds - remaining).coerceAtLeast(0) else 0L
-    val displaySeconds = if (showElapsed) elapsed else (s?.plannedDurationSeconds?.toLong() ?: settings.focusDurationSeconds.toLong()).let { planned ->
-        if (s != null) (if (showElapsed) elapsed else remaining) else planned
-    }
     var notes by remember(s?.id) { mutableStateOf(s?.notes ?: "") }
     LaunchedEffect(notes) { delay(400); if (s != null && notes != s.notes) vm.updateNotes(notes) }
 
@@ -164,27 +161,23 @@ fun FocusScreen(onGoMaps: () -> Unit) {
             onDismiss = { if (s != null) vm.stop() else onGoMaps() },
             onPick = onGoMaps)
 
-        val liveDetox = DetoxCoordinator.liveSources(detoxActs, System.currentTimeMillis())
-        if (liveDetox.isNotEmpty()) {
+        if (detoxSummary.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Digital Detox active", style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold)
-                    Text(liveDetox.joinToString(" · ") { a ->
-                        detoxProfiles.firstOrNull { it.id == a.profileId }?.name ?: "Detox"
-                    }, style = MaterialTheme.typography.bodySmall)
-                    Text("${liveDetox.size} source(s) protecting this session",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(detoxSummary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
 
         Spacer(Modifier.height(18.dp))
 
-        DottedTimerRing(progress = progress, seconds = displaySeconds, label = if (showElapsed) "ELAPSED" else kind)
+        DottedTimerRing(clock = vm.timer, showElapsed = showElapsed,
+            plannedSeconds = if (s != null) s.plannedDurationSeconds.toLong() else settings.focusDurationSeconds.toLong(),
+            hasSession = s != null, label = if (showElapsed) "ELAPSED" else kind)
 
         Spacer(Modifier.height(20.dp))
 
@@ -257,30 +250,50 @@ private fun ModeControl(icon: ImageVector, label: String, active: Boolean, onCli
 }
 
 @Composable
-private fun DottedTimerRing(progress: Float, seconds: Long, label: String) {
+private fun DottedTimerRing(clock: StateFlow<FocusViewModel.TimerUiState>, showElapsed: Boolean,
+                            plannedSeconds: Long, hasSession: Boolean, label: String) {
+    // Only this composable subscribes to the ticker: the rest of the screen
+    // stays put while the countdown runs.
+    val timer by clock.collectAsStateWithLifecycle()
+    val progress = timer.progress
+    val seconds = if (showElapsed) (plannedSeconds - timer.remainingSeconds).coerceAtLeast(0)
+                  else if (hasSession) timer.remainingSeconds else plannedSeconds
     val primary = MaterialTheme.colorScheme.primary
     val dim = MaterialTheme.colorScheme.outlineVariant
     val ticks = 60
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(264.dp)) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        // Static tick geometry is built once per size/colour change; only the
+        // active prefix and the arc are redrawn on each timer tick.
+        Box(Modifier.fillMaxSize().drawWithCache {
             val cx = size.width / 2; val cy = size.height / 2
             val r = minOf(size.width, size.height) * 0.44f
+            val minor = Path(); val major = Path()
+            val ends = ArrayList<Pair<Offset, Offset>>(ticks)
             for (i in 0 until ticks) {
                 val angle = (-90f + i * 360f / ticks) * (Math.PI / 180.0).toFloat()
-                val active = i.toFloat() / ticks <= progress
                 val outer = r
                 val inner = r - if (i % 5 == 0) 14.dp.toPx() else 8.dp.toPx()
-                drawLine(
-                    color = if (active) primary else dim,
-                    start = Offset(cx + inner * cos(angle), cy + inner * sin(angle)),
-                    end = Offset(cx + outer * cos(angle), cy + outer * sin(angle)),
-                    strokeWidth = if (i % 5 == 0) 3.dp.toPx() else 1.5.dp.toPx(),
-                )
+                val start = Offset(cx + inner * cos(angle), cy + inner * sin(angle))
+                val end = Offset(cx + outer * cos(angle), cy + outer * sin(angle))
+                ends += start to end
+                val path = if (i % 5 == 0) major else minor
+                path.moveTo(start.x, start.y); path.lineTo(end.x, end.y)
             }
-            drawArc(color = primary, startAngle = -90f, sweepAngle = 360f * progress.coerceIn(0f, 1f),
-                useCenter = false, topLeft = Offset(cx - r + 20.dp.toPx(), cy - r + 20.dp.toPx()),
-                size = Size(2 * (r - 20.dp.toPx()), 2 * (r - 20.dp.toPx())), style = Stroke(width = 2.dp.toPx()))
-        }
+            val minorStroke = Stroke(width = 1.5.dp.toPx())
+            val majorStroke = Stroke(width = 3.dp.toPx())
+            onDrawBehind {
+                drawPath(minor, dim, style = minorStroke)
+                drawPath(major, dim, style = majorStroke)
+                val active = (progress.coerceIn(0f, 1f) * ticks).toInt()
+                for (i in 0 until active) {
+                    val (start, end) = ends[i]
+                    drawLine(primary, start, end, if (i % 5 == 0) 3.dp.toPx() else 1.5.dp.toPx())
+                }
+                drawArc(color = primary, startAngle = -90f, sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                    useCenter = false, topLeft = Offset(cx - r + 20.dp.toPx(), cy - r + 20.dp.toPx()),
+                    size = Size(2 * (r - 20.dp.toPx()), 2 * (r - 20.dp.toPx())), style = Stroke(width = 2.dp.toPx()))
+            }
+        })
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(formatClock(seconds), fontSize = 42.sp, fontWeight = FontWeight.Bold)
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -318,9 +331,9 @@ private fun TaskCard(node: NodeEntity?, projectTitle: String?, session: FocusSes
                     repeat(dots) { i ->
                         Box(Modifier.size(10.dp).padding(1.dp),
                             contentAlignment = Alignment.Center) {
-                            Canvas(Modifier.size(8.dp)) {
-                                drawCircle(color = if (i < done) Color(0xFFE57373) else Color(0x55E57373))
-                            }
+                            Box(Modifier.size(8.dp).background(
+                                Color(if (i < done) 0xFFE57373.toInt() else 0x55E57373.toInt()),
+                                CircleShape))
                         }
                     }
                 }

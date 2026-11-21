@@ -11,6 +11,7 @@ import com.privacyhub.app.data.db.NodeEntity
 import com.privacyhub.app.data.db.UserSettingsEntity
 import com.privacyhub.app.data.db.ProjectEntity
 import com.privacyhub.app.data.repo.FocusMapRepository
+import com.privacyhub.app.domain.detox.DetoxCoordinator
 import com.privacyhub.app.domain.model.NodeStatus
 import com.privacyhub.app.domain.model.SessionStatus
 import com.privacyhub.app.domain.model.SessionType
@@ -43,13 +44,26 @@ class FocusViewModel(private val repo: FocusMapRepository) : ViewModel() {
     val active: StateFlow<FocusSessionEntity?> = repo.sessions.observeActive()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    data class TimerUiState(val remainingSeconds: Long = 0L, val progress: Float = 0f)
+
+    // One ticker, one StateFlow, one recomposition per second — previously two
+    // 500 ms flows recomposed the entire Focus screen twice a second.
     private val ticker: Flow<Long> = flow {
-        while (currentCoroutineContext().isActive) { emit(System.currentTimeMillis()); delay(500) }
+        while (currentCoroutineContext().isActive) { emit(System.currentTimeMillis()); delay(1000) }
     }
-    val remaining: StateFlow<Long> = combine(active, ticker) { s, now -> s?.let { Pomodoro.remainingSeconds(it, now) } ?: 0L }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
-    val progress: StateFlow<Float> = combine(active, ticker) { s, now -> s?.let { Pomodoro.progress(it, now) } ?: 0f }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+    val timer: StateFlow<TimerUiState> = combine(active, ticker) { s, now ->
+        if (s == null) TimerUiState() else TimerUiState(Pomodoro.remainingSeconds(s, now), Pomodoro.progress(s, now))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TimerUiState())
+
+    /** Detox status is derived in the ViewModel, not collected by the screen. */
+    val detoxSummary: StateFlow<String> = combine(
+        repo.observeActivations(), repo.observeProfiles()) { acts, profiles ->
+        val now = System.currentTimeMillis()
+        val live = DetoxCoordinator.liveSources(acts, now)
+        if (live.isEmpty()) "" else live.joinToString(" · ") { a ->
+            profiles.firstOrNull { it.id == a.profileId }?.name ?: "Detox"
+        } + " · ${live.size} source(s)"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val activeProject: StateFlow<ProjectEntity?> = active.flatMapLatest { s ->

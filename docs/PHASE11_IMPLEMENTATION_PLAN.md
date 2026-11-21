@@ -47,3 +47,13 @@ on-device smoke test, documented limitations.
   device smoke test and are reported as such.
 - Calendar `.ics` is exported as a shareable file via SAF; it is not inserted
   into the system calendar provider without user consent.
+
+
+## Addendum — Integrated Detox + Performance (M11.1/M11.2)
+- Detox features are already implemented (Room v4, guard service, Pomodoro
+  hooks, profiles/schedules/analytics docs) and are retained, not rebuilt.
+- Baseline frame timings and bottlenecks: `docs/PERFORMANCE_BASELINE.md`.
+- M11.2 STATUS: done — timer isolated, Detox summary moved to ViewModel, ring paths cached, debug+release rebuilt, 53 tests pass. Remeasurement in PERFORMANCE_BASELINE.md.\n- M11.2 fix order: (1) collapse Focus ticker flows and isolate timer
+  recomposition to the ring, (2) move Detox state collection into
+  `FocusViewModel`, (3) re-measure, (4) only then consider canvas work.
+- Every later milestone must re-run the same gfxinfo script and the JVM suite.
