@@ -57,7 +57,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onGoReview: () -> Unit, onGoAnalytics: () -> Unit) {
     val repo = repository()
     val vm: SettingsViewModel = viewModel(factory = viewModelFactory { initializer { SettingsViewModel(repo) } })
     val s by vm.settings.collectAsStateWithLifecycle()
@@ -92,6 +92,7 @@ fun SettingsScreen() {
             SwitchRow("Session notifications", s.notificationEnabled) { v -> vm.update { it.copy(notificationEnabled = v) } }
         } }
 
+        NavigationCard(onGoReview, onGoAnalytics)
         FocusWindowCard()
 
         ReviewReminderCard()
@@ -244,6 +245,20 @@ private fun ReviewReminderCard() {
             Slider(value = cfg.preferredReviewHour.toFloat(),
                 onValueChange = { scope.launch { repo.schedulerSettings.upsert(cfg.copy(preferredReviewHour = it.toInt().coerceIn(0, 23))) } },
                 valueRange = 0f..23f, steps = 22)
+        }
+    }
+}
+
+@Composable
+private fun NavigationCard(onGoReview: () -> Unit, onGoAnalytics: () -> Unit) {
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text("Tools", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Review and analytics live here so the bottom bar stays focused on your work.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onGoReview, modifier = Modifier.fillMaxWidth()) { Text("Daily review") }
+            OutlinedButton(onClick = onGoAnalytics, modifier = Modifier.fillMaxWidth()) { Text("Analytics") }
         }
     }
 }

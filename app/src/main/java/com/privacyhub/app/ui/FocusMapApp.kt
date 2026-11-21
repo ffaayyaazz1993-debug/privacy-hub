@@ -86,11 +86,10 @@ fun FocusMapApp() {
             Tab(Routes.MAPS, "Maps", Icons.Rounded.Hub),
             Tab(Routes.FOCUS, "Focus", Icons.Rounded.Timer),
             Tab(Routes.PLANNER, "Planner", Icons.Rounded.DateRange),
-            Tab(Routes.REVIEW, "Review", Icons.Rounded.Quiz),
-            Tab(Routes.ANALYTICS, "Analytics", Icons.Rounded.BarChart),
             Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
         )
-        val showBar = tabs.any { it.route == currentRoute }
+        val showBar = tabs.any { it.route == currentRoute } ||
+            currentRoute == Routes.REVIEW || currentRoute == Routes.ANALYTICS
         Scaffold(
             bottomBar = {
                 if (showBar) NavigationBar {
@@ -132,7 +131,10 @@ fun FocusMapApp() {
                     arguments = listOf(navArgument("nodeId") { type = NavType.LongType }),
                 ) { entry -> ReviewScreen(filterNodeId = entry.arguments?.getLong("nodeId")) }
                 composable(Routes.ANALYTICS) { AnalyticsScreen() }
-                composable(Routes.SETTINGS) { SettingsScreen() }
+                composable(Routes.SETTINGS) { SettingsScreen(
+                    onGoReview = { nav.navigate(Routes.REVIEW) },
+                    onGoAnalytics = { nav.navigate(Routes.ANALYTICS) },
+                ) }
                 composable(
                     Routes.CANVAS,
                     arguments = listOf(navArgument("projectId") { type = NavType.LongType }),
